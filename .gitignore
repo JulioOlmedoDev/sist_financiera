@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Config / entorno
+.env
+*.env
+*.ini
+*.cfg
+
+# Archivos temporales o de sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Base de datos local (si usás SQLite)
+*.sqlite3
+*.db
+
+# Archivos generados (PDF, Word, Excel)
+*.pdf
+*.docx
+*.xlsx
+
+# Plantillas
+plantillas/*.docx
+plantillas/*.xlsx
+
+# Archivos de log o debug
+*.log
+
+# Archivos de VS Code
+.vscode/
+
+# Archivos de PyInstaller (si lo convertís en .exe)
+build/
+dist/
+*.spec
+
+# Archivos del sistema operativo
+*.swp
+*.bak
+*.tmp
+*.old
+
+# Archivos ejecutables
+*.exe
+venv/ 
