@@ -309,7 +309,7 @@ class VentanaPrincipal(QMainWindow):
             btn_consultas.clicked.connect(self.abrir_form_consultas)
             self.menu_layout.addWidget(btn_consultas)
 
-        
+
         elif modulo == "productos":
             if tiene_permiso(self.usuario, "crear_categoria"):
                 btn_categorias = BotonNavegacion("  Categorías", "static/icons/tag.png")

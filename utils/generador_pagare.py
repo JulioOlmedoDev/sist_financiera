@@ -66,20 +66,22 @@ def reemplazar_tags_pagare(doc: Document, datos: dict):
                 p.text = p.text.replace(token, str(val))
 
 
-def calcular_fecha_vencimiento(fecha_inicio, cuotas, plan_pago):
-    if plan_pago == "diaria":
-        return fecha_inicio + relativedelta(days=cuotas)
-    elif plan_pago == "semanal":
-        return fecha_inicio + relativedelta(weeks=cuotas)
-    else:
-        return fecha_inicio + relativedelta(months=cuotas)
-
-
 def preparar_datos_pagare(venta: Venta) -> dict:
     cliente = venta.cliente
     garante = venta.garante
-    inicio = venta.fecha_inicio_pago or venta.fecha
-    vencimiento = calcular_fecha_vencimiento(inicio, venta.num_cuotas, venta.plan_pago)
+
+    fecha_pagare = venta.fecha
+    fecha_inicio_pago = venta.fecha_inicio_pago
+
+    # Calcular vencimiento real: fecha de la última cuota
+    if venta.plan_pago == "diaria":
+        intervalo = relativedelta(days=1)
+    elif venta.plan_pago == "semanal":
+        intervalo = relativedelta(weeks=1)
+    else:
+        intervalo = relativedelta(months=1)
+
+    fecha_vencimiento = fecha_inicio_pago + intervalo * (venta.num_cuotas - 1)
 
     return {
         "cliente_nombre": f"{cliente.apellidos} {cliente.nombres}",
@@ -92,8 +94,8 @@ def preparar_datos_pagare(venta: Venta) -> dict:
         "garante_domicilio": garante.domicilio_personal if garante else "________",
         "monto_letras": f"{monto_formateado(venta.ptf)} - {monto_con_letras(venta.ptf)}",
         "tem": f"{venta.tem:.2f}",
-        "fecha_pagare": inicio.strftime("%A %d de %B de %Y").capitalize(),
-        "fecha_vencimiento": vencimiento.strftime("%d de %B de %Y").capitalize(),
+        "fecha_pagare": fecha_pagare.strftime("%A %d de %B de %Y").capitalize(),
+        "fecha_vencimiento": fecha_vencimiento.strftime("%d de %B de %Y").capitalize(),
         "ciudad": "Río Cuarto"
     }
 
@@ -108,17 +110,12 @@ def generar_pagare_word(venta: Venta, plantilla_path: str) -> str:
 
 
 def generar_pagare_excel(venta: Venta) -> str:
-    """
-    Reemplaza los placeholders {{campo}} en la plantilla de Excel, respetando estilos.
-    """
     plantilla_path = "plantillas/pagare_excel.xlsx"
     datos = preparar_datos_pagare(venta)
 
-    # Abrir workbook sin perder estilos
     wb = load_workbook(plantilla_path, data_only=False)
-    ws = wb.active  # o usar ws = wb['PAGARÉ A LA VISTA GARANTES']
+    ws = wb.active
 
-    # Reemplazar solo celdas con placeholders
     for row in ws.iter_rows():
         for cell in row:
             val = cell.value
@@ -129,7 +126,6 @@ def generar_pagare_excel(venta: Venta) -> str:
                         cell.value = val.replace(token, str(v))
                         break
 
-    # Ajustar ancho de columnas si fuera necesario
     for col in ws.columns:
         max_length = 0
         col_letter = get_column_letter(col[0].column)
@@ -141,6 +137,3 @@ def generar_pagare_excel(venta: Venta) -> str:
     salida_path = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx").name
     wb.save(salida_path)
     return salida_path
-
-
-

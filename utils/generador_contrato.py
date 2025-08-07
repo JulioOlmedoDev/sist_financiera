@@ -60,7 +60,9 @@ def monto_con_letras(valor):
 def preparar_datos_contrato(venta: Venta):
     cliente = venta.cliente
     garante = venta.garante
-    fecha = venta.fecha_inicio_pago or venta.fecha
+
+    fecha_contrato = venta.fecha
+    fecha_inicio_pago = venta.fecha_inicio_pago
 
     frecuencia = venta.plan_pago
     if frecuencia == "diaria":
@@ -74,7 +76,7 @@ def preparar_datos_contrato(venta: Venta):
         texto_periodicidad = "mensuales"
 
     vencs = [
-        f"La cuota {i+1} vence el: {(fecha + intervalo * i).strftime('%A, %d de %B de %Y').capitalize()}"
+        f"La cuota {i+1} vence el: {(fecha_inicio_pago + intervalo * i).strftime('%A, %d de %B de %Y').capitalize()}"
         for i in range(venta.num_cuotas)
     ]
 
@@ -96,11 +98,11 @@ def preparar_datos_contrato(venta: Venta):
         "garante_domicilio": garante.domicilio_personal if garante else "________",
         "garante_dni": garante.dni if garante else "________",
         "garante_localidad": garante.localidad if garante else "________",
-        "dia": fecha.day,
-        "mes": fecha.strftime('%B').capitalize(),
-        "anio": fecha.year,
+        "dia": fecha_contrato.day,
+        "mes": fecha_contrato.strftime('%B').capitalize(),
+        "anio": fecha_contrato.year,
         "texto_periodicidad": texto_periodicidad,
-        "fecha_inicio_pago": fecha.strftime("%d/%m/%Y")
+        "fecha_inicio_pago": fecha_inicio_pago.strftime("%d/%m/%Y")
     }
 
 
@@ -136,7 +138,6 @@ def generar_contrato_excel(venta: Venta) -> str:
                     cell.value = cell.value.replace(f"{{{{{key}}}}}", str(val))
 
     # Ajustar columnas automáticamente al contenido
-    from openpyxl.utils import get_column_letter
     for col in ws.columns:
         max_length = 0
         col_letter = get_column_letter(col[0].column)
@@ -147,6 +148,3 @@ def generar_contrato_excel(venta: Venta) -> str:
 
     wb.save(salida_path)
     return salida_path
-
-
-
