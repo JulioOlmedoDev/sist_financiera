@@ -1,15 +1,17 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QHBoxLayout, QHeaderView, QLineEdit, QMessageBox, QDialog, QDialogButtonBox
+    QPushButton, QHBoxLayout, QHeaderView, QLineEdit, QMessageBox,
+    QDialog, QDialogButtonBox
 )
 from PySide6.QtCore import Qt
 from database import session
 from models import Venta, Cliente
 from gui.form_venta import FormVenta
-from utils.generador_contrato import generar_contrato_word, generar_contrato_excel, generar_contrato_excel
-from utils.generador_pagare import generar_pagare_word, generar_pagare_excel, generar_pagare_excel
+from utils.generador_contrato import generar_contrato_word, generar_contrato_excel
+from utils.generador_pagare import generar_pagare_word, generar_pagare_excel
 from gui.form_cobro import FormCobro
 import os
+import platform
 import unicodedata
 
 class FormVentas(QWidget):
@@ -63,8 +65,27 @@ class FormVentas(QWidget):
             QPushButton:hover {
                 background-color: #7b1fa2;
             }
-        """
-        )
+        """)
+
+    # ---------- util ----------
+
+    def _open_file(self, path: str):
+        """Abrir archivo con la app por defecto en Windows/macOS/Linux."""
+        try:
+            if not os.path.exists(path):
+                return False
+            system = platform.system().lower()
+            if "windows" in system:
+                os.startfile(path)  # type: ignore[attr-defined]
+            elif "darwin" in system:  # macOS
+                os.system(f"open '{path}'")
+            else:  # Linux
+                os.system(f"xdg-open '{path}'")
+            return True
+        except Exception:
+            return False
+
+    # ---------- datos ----------
 
     def cargar_datos(self):
         self.todas_las_ventas = session.query(Venta).all()
@@ -129,17 +150,7 @@ class FormVentas(QWidget):
             btn_cobros.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_cobros(vid))
             self.tabla.setCellWidget(row_index, 9, btn_cobros)
 
-    def generar_callback_ver_detalle(self, venta_id):
-        return lambda checked=False: self.ver_detalle_venta(venta_id)
-
-    def generar_callback_editar(self, venta_id):
-        return lambda checked=False: self.editar_venta(venta_id)
-
-    def generar_callback_abrir_docs(self, venta_id):
-        return lambda checked=False: self.abrir_documentos_venta(venta_id)
-
-    def generar_callback_cobros(self, venta_id):
-        return lambda checked=False: self.abrir_cobros(venta_id)
+    # ---------- acciones ----------
 
     def ver_detalle_venta(self, venta_id):
         v = session.query(Venta).get(venta_id)
@@ -186,7 +197,6 @@ class FormVentas(QWidget):
         self.form.showMaximized()
         self.form.closeEvent = self._refrescar_al_cerrar
 
-
     def abrir_documentos_venta(self, venta_id):
         venta = session.query(Venta).get(venta_id)
         if not venta:
@@ -207,35 +217,54 @@ class FormVentas(QWidget):
         btn_cancel = QDialogButtonBox(QDialogButtonBox.Cancel)
         vbox.addWidget(btn_cancel)
 
-        # Conexiones
         btn_cancel.rejected.connect(dlg.reject)
 
         def abrir_word():
-            # Generar solo en Word
             plantilla_c = "plantillas/plantilla_contrato_mutuo.docx"
-            path_c = generar_contrato_word(venta, plantilla_c)
             plantilla_p = "plantillas/plantilla_pagare_con_garante.docx"
-            path_p = generar_pagare_word(venta, plantilla_p)
+
+            # Validar plantillas
+            faltan = [p for p in (plantilla_c, plantilla_p) if not os.path.exists(p)]
+            if faltan:
+                QMessageBox.critical(self, "Plantillas faltantes",
+                                     "No se encontraron estas plantillas:\n- " + "\n- ".join(faltan))
+                return
+
+            try:
+                path_c = generar_contrato_word(venta, plantilla_c)
+                path_p = generar_pagare_word(venta, plantilla_p)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudieron generar los documentos Word:\n{e}")
+                return
+
+            abiertos = 0
             for p in (path_c, path_p):
-                if os.path.exists(p):
-                    os.system(f"xdg-open '{p}'")
+                if self._open_file(p):
+                    abiertos += 1
+            if abiertos == 0:
+                QMessageBox.warning(self, "Aviso", "Se generaron los documentos, pero no se pudieron abrir automáticamente.")
             dlg.accept()
 
         def abrir_excel():
-            # Generar solo en Excel
-            path_c = generar_contrato_excel(venta)
-            path_p = generar_pagare_excel(venta)
+            try:
+                path_c = generar_contrato_excel(venta)
+                path_p = generar_pagare_excel(venta)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudieron generar los documentos Excel:\n{e}")
+                return
+
+            abiertos = 0
             for p in (path_c, path_p):
-                if os.path.exists(p):
-                    os.system(f"xdg-open '{p}'")
+                if self._open_file(p):
+                    abiertos += 1
+            if abiertos == 0:
+                QMessageBox.warning(self, "Aviso", "Se generaron los documentos, pero no se pudieron abrir automáticamente.")
             dlg.accept()
 
         btn_word.clicked.connect(abrir_word)
         btn_excel.clicked.connect(abrir_excel)
 
         dlg.exec()
-
-
 
     def abrir_cobros(self, venta_id):
         self.form = FormCobro(venta_id=venta_id)
@@ -247,6 +276,8 @@ class FormVentas(QWidget):
         self.form.setAttribute(Qt.WA_DeleteOnClose)
         self.form.showMaximized()
         self.form.closeEvent = self._refrescar_al_cerrar
+
+    # ---------- filtro ----------
 
     def filtrar_ventas(self):
         texto = self.normalizar(self.buscador.text())
@@ -278,6 +309,7 @@ class FormVentas(QWidget):
             return ""
         return unicodedata.normalize('NFKD', texto.lower()).encode('ASCII', 'ignore').decode('utf-8')
 
+    # ---------- refresh ----------
 
     def _refrescar_al_cerrar(self, event):
         self.cargar_datos()
