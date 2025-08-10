@@ -314,3 +314,28 @@ class FormVentas(QWidget):
     def _refrescar_al_cerrar(self, event):
         self.cargar_datos()
         event.accept()
+
+
+    def abrir_cobros(self, venta_id):
+        self.form = FormCobro(venta_id=venta_id)
+        venta = session.query(Venta).get(venta_id)
+        if venta and venta.cliente:
+            cliente = venta.cliente
+            self.form.setWindowTitle(f"Gestión de Cobros – Venta #{venta.id} – {cliente.apellidos}, {cliente.nombres}")
+
+        # 🔗 Conectar señales para refrescar el listado automáticamente
+        def _refrescar(_venta_id=None):
+            # refresca todo el listado; si querés podemos optimizar a solo esa fila
+            self.cargar_datos()
+
+        self.form.cobro_registrado.connect(_refrescar)
+        self.form.cuotas_actualizadas.connect(_refrescar)
+        self.form.venta_finalizada.connect(_refrescar)
+
+        self.form.setWindowModality(Qt.ApplicationModal)
+        self.form.setAttribute(Qt.WA_DeleteOnClose)
+        self.form.showMaximized()
+
+        # Fallback: si cierra sin emitir señal, refrescar igual
+        self.form.closeEvent = self._refrescar_al_cerrar
+

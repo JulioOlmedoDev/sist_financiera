@@ -1,18 +1,32 @@
+# gui/form_cobro.py
+
+import unicodedata
+from datetime import date
+
 from PySide6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QPushButton,
-    QTableWidget, QTableWidgetItem, QTextEdit,
+    QTableWidget, QTableWidgetItem, QLineEdit, QCompleter,
     QDoubleSpinBox, QInputDialog, QMessageBox, QHBoxLayout, QDialog,
-    QFormLayout, QDialogButtonBox
+    QFormLayout, QDialogButtonBox, QSizePolicy
 )
-from PySide6.QtCore import QDate, Qt
-from datetime import date
-from dateutil.relativedelta import relativedelta
-
+from PySide6.QtCore import QDate, Qt, Signal
 from database import session
 from models import Venta, Cuota, Cobro
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll, DoubleSpinBoxSinScroll
 
 
+# ---------- Constantes de layout fijo ----------
+HEIGHT_SEARCH   = 30   # Buscar Venta (alto de controles)
+HEIGHT_TITLE    = 22   # "Venta #..."
+ROW_HEIGHT      = 24   # alto de cada fila de la tabla
+VISIBLE_ROWS    = 12   # filas visibles fijas
+HEIGHT_FIELDS   = 30   # Fecha/Monto/Tipo
+HEIGHT_OBS      = 30   # Observaciones
+HEIGHT_BUTTONS  = 40   # Botonera
+ROOT_MARGINS    = (8, 6, 8, 8)  # l, t, r, b
+
+
+# ---------------- Diálogo para nueva cuota por mora ----------------
 class DialogCuotaMora(QDialog):
     def __init__(self):
         super().__init__()
@@ -39,145 +53,286 @@ class DialogCuotaMora(QDialog):
         return self.monto_input.value(), self.fecha_input.date().toPython()
 
 
+# ---------------- Formulario principal de cobros (bloques fijos) ----------------
 class FormCobro(QWidget):
+    # Señales para refrescar listado/otras vistas (si las necesitás)
+    cobro_registrado = Signal(int)       # venta_id
+    cuotas_actualizadas = Signal(int)    # venta_id
+    venta_finalizada = Signal(int)       # venta_id
+
     def __init__(self, venta_id=None):
         super().__init__()
         self.venta_id = venta_id
         self.venta = session.query(Venta).get(self.venta_id) if self.venta_id else None
 
+        # Título de ventana
         if self.venta:
-            cliente = self.venta.cliente
-            self.setWindowTitle(f"Gestión de Cobros – Venta #{self.venta.id} – {cliente.apellidos}, {cliente.nombres}")
+            c = self.venta.cliente
+            self.setWindowTitle(f"Gestión de Cobros – Venta #{self.venta.id} – {c.apellidos}, {c.nombres}")
         else:
             self.setWindowTitle("Gestión de Cobros")
 
+        # --- Layout raíz (márgenes y espacios fijos) ---
         self.setMinimumSize(850, 700)
-        layout = QVBoxLayout(self)
+        root = QVBoxLayout(self)
+        l, t, r, b = ROOT_MARGINS
+        root.setContentsMargins(l, t, r, b)
+        root.setSpacing(6)
 
-        if not self.venta_id:
-            layout.addWidget(QLabel("Seleccionar Venta:"))
-            self.ventas_combo = ComboBoxSinScroll()
-            self.ventas = session.query(Venta).filter_by(anulada=False).all()
-            for v in self.ventas:
-                label = f"Venta #{v.id} – {v.cliente.apellidos}, {v.cliente.nombres}"
-                self.ventas_combo.addItem(label, userData=v.id)
-            self.ventas_combo.currentIndexChanged.connect(self.cargar_cuotas)
-            layout.addWidget(self.ventas_combo)
-        else:
-            self.ventas_combo = None
-            label = QLabel(f"Venta #{self.venta.id} – {self.venta.cliente.apellidos}, {self.venta.cliente.nombres}")
-            label.setStyleSheet("font-weight: bold; font-size: 14px; color: #333; margin-bottom: 10px;")
-            layout.addWidget(label)
+        # ===== Bloque: Buscar venta (SIEMPRE visible, fijo) =====
+        fila_busqueda = QHBoxLayout()
+        fila_busqueda.setContentsMargins(0, 0, 0, 0)
+        fila_busqueda.setSpacing(8)
 
+        lbl_buscar = QLabel("Buscar Venta:")
+        self.buscador = QLineEdit()
+        self.buscador.setPlaceholderText("Apellido, DNI o #ID (ej.: Pérez · 30123456 · #125)")
+        self.btn_cargar_busqueda = QPushButton("Cargar")
+
+        # Alturas y policies fijos
+        for w in (lbl_buscar, self.buscador, self.btn_cargar_busqueda):
+            w.setSizePolicy(QSizePolicy.Fixed if w is not self.buscador else QSizePolicy.Expanding,
+                            QSizePolicy.Fixed)
+            w.setFixedHeight(HEIGHT_SEARCH)
+        self.btn_cargar_busqueda.setFixedWidth(90)
+
+        fila_busqueda.addWidget(lbl_buscar)
+        fila_busqueda.addWidget(self.buscador, 1)
+        fila_busqueda.addWidget(self.btn_cargar_busqueda)
+
+        row_busqueda = QWidget()
+        row_busqueda.setLayout(fila_busqueda)
+        row_busqueda.setFixedHeight(HEIGHT_SEARCH)
+        root.addWidget(row_busqueda)
+
+        # Datos para autocompletar
+        self._display_map = {}
+        opciones = []
+        for v in session.query(Venta).filter_by(anulada=False).all():
+            cli = v.cliente
+            ap = (cli.apellidos or "").strip()
+            no = (cli.nombres or "").strip()
+            dni = (cli.dni or "").strip()
+            display = f"Venta #{v.id} – {ap}, {no}" + (f" (DNI {dni})" if dni else "")
+            self._display_map[self._normalize(display)] = v.id
+            opciones.append(display)
+        self._completer = QCompleter(opciones, self)
+        self._completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._completer.setFilterMode(Qt.MatchContains)
+        self._completer.setCompletionMode(QCompleter.PopupCompletion)
+        self.buscador.setCompleter(self._completer)
+        self._completer.activated[str].connect(self._on_busqueda_activada)
+        self.btn_cargar_busqueda.clicked.connect(self._cargar_desde_texto)
+        self.buscador.returnPressed.connect(self._cargar_desde_texto)
+
+        # Si vino con venta_id, mostrar en el buscador
+        if self.venta:
+            cli = self.venta.cliente
+            self.buscador.setText(f"Venta #{self.venta.id} – {cli.apellidos}, {cli.nombres}" + (f" (DNI {cli.dni})" if cli.dni else ""))
+
+        # ===== Bloque: Título "Venta #…" (SIEMPRE visible, fijo) =====
+        self.lbl_info_venta = QLabel(self._venta_label_text())
+        self.lbl_info_venta.setWordWrap(False)
+        self.lbl_info_venta.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_info_venta.setStyleSheet("font-weight:600; font-size:13px; color:#333; margin:0; padding:0;")
+
+        row_titulo = QWidget()
+        lay_titulo = QHBoxLayout(row_titulo)
+        lay_titulo.setContentsMargins(0, 0, 0, 0)
+        lay_titulo.addWidget(self.lbl_info_venta)
+        row_titulo.setFixedHeight(HEIGHT_TITLE)
+        root.addWidget(row_titulo)
+
+        # ===== Bloque: Tabla de cuotas (ALTO FIJO para 12 filas) =====
         self.tabla_cuotas = QTableWidget()
-        self.tabla_cuotas.setMinimumHeight(300)
         self.tabla_cuotas.setColumnCount(7)
         self.tabla_cuotas.setHorizontalHeaderLabels([
             "N°", "Vencimiento", "Fecha Pago", "Monto Original", "Pagado", "Estado", "Concepto"
         ])
+        self.tabla_cuotas.setAlternatingRowColors(True)
         self.tabla_cuotas.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(self.tabla_cuotas)
+        self.tabla_cuotas.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
+        self.tabla_cuotas.verticalHeader().setMinimumSectionSize(ROW_HEIGHT)
+        self.tabla_cuotas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        layout.addWidget(QLabel("Fecha de Cobro:"))
+        tabla_alto = self._height_for_rows(VISIBLE_ROWS)
+        self.tabla_cuotas.setFixedHeight(tabla_alto)
+        root.addWidget(self.tabla_cuotas)
+
+        # ===== Bloque: Fecha / Monto / Tipo (FIJO) =====
+        fila_campos = QHBoxLayout()
+        fila_campos.setContentsMargins(0, 0, 0, 0)
+        fila_campos.setSpacing(10)
+
+        lbl_fecha = QLabel("Fecha:")
         self.fecha_input = DateEditSinScroll(QDate.currentDate())
         self.fecha_input.setCalendarPopup(True)
-        layout.addWidget(self.fecha_input)
 
-        layout.addWidget(QLabel("Monto Abonado:"))
+        lbl_monto = QLabel("Monto:")
         self.monto_input = DoubleSpinBoxSinScroll()
         self.monto_input.setPrefix("$ ")
         self.monto_input.setMaximum(999_999_999.99)
         self.monto_input.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        layout.addWidget(self.monto_input)
 
-        layout.addWidget(QLabel("Tipo de Cobro:"))
+        lbl_tipo = QLabel("Tipo:")
         self.tipo_combo = ComboBoxSinScroll()
         self.tipo_combo.addItems(["entrega", "pago_total", "refinanciacion"])
-        layout.addWidget(self.tipo_combo)
 
-        layout.addWidget(QLabel("Observaciones:"))
-        self.observaciones_input = QTextEdit()
-        self.observaciones_input.setFixedHeight(50)
-        layout.addWidget(self.observaciones_input)
+        for w in (lbl_fecha, self.fecha_input, lbl_monto, self.monto_input, lbl_tipo, self.tipo_combo):
+            w.setFixedHeight(HEIGHT_FIELDS)
+            if hasattr(w, "setMaximumWidth"):
+                if w is self.fecha_input:
+                    w.setMaximumWidth(140)
+                if w is self.monto_input:
+                    w.setMaximumWidth(160)
+                if w is self.tipo_combo:
+                    w.setMaximumWidth(160)
 
-        botones_layout = QHBoxLayout()
+        fila_campos.addWidget(lbl_fecha)
+        fila_campos.addWidget(self.fecha_input)
+        fila_campos.addWidget(lbl_monto)
+        fila_campos.addWidget(self.monto_input)
+        fila_campos.addWidget(lbl_tipo)
+        fila_campos.addWidget(self.tipo_combo)
+        fila_campos.addStretch(1)
+
+        row_campos = QWidget()
+        row_campos.setLayout(fila_campos)
+        row_campos.setFixedHeight(HEIGHT_FIELDS)
+        root.addWidget(row_campos)
+
+        # ===== Bloque: Observaciones (FIJO, 1 línea) =====
+        fila_obs = QHBoxLayout()
+        fila_obs.setContentsMargins(0, 0, 0, 0)
+        fila_obs.setSpacing(8)
+        fila_obs.addWidget(QLabel("Observaciones:"))
+        self.observaciones_input = QLineEdit()
+        self.observaciones_input.setPlaceholderText("Opcional")
+        self.observaciones_input.setFixedHeight(HEIGHT_OBS)
+        fila_obs.addWidget(self.observaciones_input, 1)
+
+        row_obs = QWidget()
+        row_obs.setLayout(fila_obs)
+        row_obs.setFixedHeight(HEIGHT_OBS)
+        root.addWidget(row_obs)
+
+        # ===== Bloque: Botones (FIJO) =====
+        botones = QHBoxLayout()
+        botones.setContentsMargins(0, 0, 0, 0)
+        botones.setSpacing(8)
+
         self.btn_guardar = QPushButton("Registrar Cobro")
-        self.btn_guardar.clicked.connect(self.registrar_cobro)
         self.btn_guardar.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border-radius: 5px;
-                padding: 6px 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
+            QPushButton { background-color: #4CAF50; color: white; border-radius: 5px; padding: 6px 12px; font-weight: bold; }
+            QPushButton:hover { background-color: #45a049; }
         """)
-        botones_layout.addWidget(self.btn_guardar)
+        self.btn_guardar.clicked.connect(self.registrar_cobro)
+        botones.addWidget(self.btn_guardar)
 
         self.btn_finalizar = QPushButton("Finalizar Venta")
         self.btn_finalizar.setEnabled(False)
-        self.btn_finalizar.clicked.connect(self.finalizar_venta)
         self.btn_finalizar.setStyleSheet("""
-            QPushButton {
-                background-color: #9E9E9E;
-                color: white;
-                border-radius: 5px;
-                padding: 6px 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #7E7E7E;
-            }
+            QPushButton { background-color: #9E9E9E; color: white; border-radius: 5px; padding: 6px 12px; font-weight: bold; }
+            QPushButton:hover { background-color: #7E7E7E; }
         """)
-        botones_layout.addWidget(self.btn_finalizar)
+        self.btn_finalizar.clicked.connect(self.finalizar_venta)
+        botones.addWidget(self.btn_finalizar)
 
         self.btn_mora = QPushButton("Agregar Cuota por Mora")
         self.btn_mora.setEnabled(False)
-        self.btn_mora.clicked.connect(self.agregar_cuota_mora)
         self.btn_mora.setStyleSheet("""
-            QPushButton {
-                background-color: #FFEB3B;
-                color: black;
-                border-radius: 5px;
-                padding: 6px 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #FDD835;
-            }
+            QPushButton { background-color: #FFEB3B; color: black; border-radius: 5px; padding: 6px 12px; font-weight: bold; }
+            QPushButton:hover { background-color: #FDD835; }
         """)
-        botones_layout.addWidget(self.btn_mora)
+        self.btn_mora.clicked.connect(self.agregar_cuota_mora)
+        botones.addWidget(self.btn_mora)
 
-        layout.addLayout(botones_layout)
+        botones.addStretch(1)
+
+        row_botones = QWidget()
+        row_botones.setLayout(botones)
+        row_botones.setFixedHeight(HEIGHT_BUTTONS)
+        root.addWidget(row_botones)
+
+        # Carga inicial
         self.cargar_cuotas()
 
-    def cargar_cuotas(self):
-        venta_id = self.venta_id or (self.ventas_combo.currentData() if self.ventas_combo else None)
-        if not venta_id:
-            return
+    # ---------------- Utilidades ----------------
+    def _normalize(self, texto: str) -> str:
+        if not texto:
+            return ""
+        return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower()
 
+    def _venta_label_text(self) -> str:
+        if not self.venta:
+            return ""
+        c = self.venta.cliente
+        return f"Venta #{self.venta.id} – {c.apellidos}, {c.nombres}"
+
+    def _height_for_rows(self, rows: int) -> int:
+        """alto exacto ~ header + filas*ROW_HEIGHT + borde"""
+        header_h = 24  # si en tu tema se ve 1–2 px distinto, ajustá acá
+        frame = 2  # aprox. 1px * 2
+        return header_h + (rows * ROW_HEIGHT) + frame + 2
+
+    # ---------------- Buscar / seleccionar ----------------
+    def _on_busqueda_activada(self, texto):
+        vid = self._display_map.get(self._normalize(texto))
+        if vid:
+            self._cargar_venta(vid)
+
+    def _cargar_desde_texto(self):
+        txt = self._normalize((self.buscador.text() or "").strip())
+        # Match por display exacto
+        if txt in self._display_map:
+            self._cargar_venta(self._display_map[txt])
+            return
+        # Buscar por ID numérico (#123, 123)
+        num = "".join(ch for ch in txt if ch.isdigit())
+        if num.isdigit():
+            v = session.query(Venta).get(int(num))
+            if v and not v.anulada:
+                self._cargar_venta(v.id)
+                return
+        QMessageBox.warning(self, "Sin coincidencias", "No se encontraron ventas que coincidan.")
+
+    def _cargar_venta(self, venta_id: int):
         self.venta = session.query(Venta).get(venta_id)
         if not self.venta:
             return
+        c = self.venta.cliente
+        self.setWindowTitle(f"Gestión de Cobros – Venta #{self.venta.id} – {c.apellidos}, {c.nombres}")
+        self.lbl_info_venta.setText(self._venta_label_text())
+        self.cargar_cuotas()
 
-        self.cuotas = session.query(Cuota)\
-            .filter_by(venta_id=self.venta.id)\
-            .order_by(Cuota.numero)\
+    # ---------------- Carga de cuotas + habilitaciones ----------------
+    def cargar_cuotas(self):
+        if not self.venta:
+            # sin venta: deshabilitar campos de carga
+            self.tabla_cuotas.setRowCount(0)
+            self._deshabilitar_campos_carga()
+            self.btn_finalizar.setEnabled(False)
+            self.btn_mora.setEnabled(False)
+            self.btn_guardar.setEnabled(False)
+            return
+
+        self.cuotas = (
+            session.query(Cuota)
+            .filter_by(venta_id=self.venta.id)
+            .order_by(Cuota.numero)
             .all()
+        )
 
         self.tabla_cuotas.setRowCount(len(self.cuotas))
         for i, c in enumerate(self.cuotas):
             if c.pagada:
                 pagada_con_mora = c.fecha_pago and c.fecha_pago > c.fecha_vencimiento
                 estado = "Con Mora" if pagada_con_mora else "Pagada"
-                color  = Qt.yellow     if pagada_con_mora else Qt.green
+                color = Qt.yellow if pagada_con_mora else Qt.green
             elif c.fecha_vencimiento < date.today():
-                estado = "Vencida";  color = Qt.red
+                estado, color = "Vencida", Qt.red
             else:
-                estado = "Pendiente"; color = Qt.white
+                estado, color = "Pendiente", Qt.white
 
             self.tabla_cuotas.setItem(i, 0, QTableWidgetItem(str(c.numero)))
             self.tabla_cuotas.setItem(i, 1, QTableWidgetItem(c.fecha_vencimiento.strftime("%d/%m/%Y")))
@@ -189,22 +344,32 @@ class FormCobro(QWidget):
             self.tabla_cuotas.setItem(i, 5, item_estado)
             self.tabla_cuotas.setItem(i, 6, QTableWidgetItem(c.concepto or ""))
 
+        # Habilitaciones fijas
         cuotas_normales = [c for c in self.cuotas if not getattr(c, 'refinanciada', False)]
-
-        todas_pagadas   = all(c.pagada for c in self.cuotas)
-        mora_normales   = any(
+        todas_pagadas = all(c.pagada for c in self.cuotas)
+        mora_normales = any(
             c.pagada and c.fecha_pago and c.fecha_pago > c.fecha_vencimiento
             for c in cuotas_normales
         )
 
-        self.btn_guardar.setEnabled(True)
-        self.btn_finalizar.setEnabled(todas_pagadas)
-        self.btn_mora.setEnabled(mora_normales)
-
-        if self.venta.finalizada and not self.ventas_combo:
+        if self.venta.finalizada:
             self._deshabilitar_formulario_finalizado()
+        else:
+            self._habilitar_formulario_activo()
+            self.btn_finalizar.setEnabled(todas_pagadas)
+            self.btn_mora.setEnabled(mora_normales)
 
+        self.btn_guardar.setEnabled(True)
+
+    # ---------------- Acciones ----------------
     def registrar_cobro(self):
+        if not self.venta:
+            QMessageBox.warning(self, "Venta no seleccionada", "Primero seleccioná una venta.")
+            return
+        if self.venta.finalizada:
+            QMessageBox.warning(self, "Venta finalizada", "No se pueden registrar cobros en una venta finalizada.")
+            return
+
         monto = self.monto_input.value()
         if monto <= 0:
             QMessageBox.warning(self, "Error", "Ingresá un monto mayor a $0.")
@@ -215,7 +380,7 @@ class FormCobro(QWidget):
             fecha=self.fecha_input.date().toPython(),
             monto=monto,
             tipo=self.tipo_combo.currentText(),
-            observaciones=self.observaciones_input.toPlainText()
+            observaciones=self.observaciones_input.text()
         )
         session.add(cobro)
 
@@ -234,10 +399,15 @@ class FormCobro(QWidget):
                 break
 
         session.commit()
+        self.cobro_registrado.emit(self.venta.id)
         QMessageBox.information(self, "Éxito", "Cobro registrado correctamente.")
         self.cargar_cuotas()
 
     def finalizar_venta(self):
+        if not self.venta:
+            QMessageBox.warning(self, "Venta no seleccionada", "Primero seleccioná una venta.")
+            return
+
         cuotas_normales = [c for c in self.cuotas if not getattr(c, 'refinanciada', False)]
         cuotas_mora     = [c for c in self.cuotas if getattr(c, 'refinanciada', False)]
 
@@ -252,22 +422,18 @@ class FormCobro(QWidget):
                            for c in cuotas_mora)
 
         if mora_normal or mora_en_mora:
-            mensaje = ("Se detectaron cuotas pagadas fuera de término.\n"
-                       "¿Deseás generar cuotas por mora antes de finalizar?")
-            resp = QMessageBox.question(self, "Cuotas con Mora", mensaje,
+            resp = QMessageBox.question(self, "Cuotas con Mora",
+                                        "¿Deseás generar cuotas por mora antes de finalizar?",
                                         QMessageBox.Yes | QMessageBox.No)
             if resp == QMessageBox.Yes:
                 return
             if mora_en_mora:
-                mensaje = (
-                    "Las cuotas por mora también fueron pagadas fuera de término.\n"
-                    "¿Deseás generar nuevas cuotas por mora?"
-                )
-                resp = QMessageBox.question(self, "Mora en mora", mensaje,
+                resp = QMessageBox.question(self, "Mora en mora",
+                                            "Las cuotas por mora también fueron pagadas fuera de término.\n"
+                                            "¿Deseás generar nuevas cuotas por mora?",
                                             QMessageBox.Yes | QMessageBox.No)
                 if resp == QMessageBox.Yes:
-                    return  # No finaliza, el usuario quiere seguir generando
-
+                    return
 
         self.venta.finalizada = True
         session.commit()
@@ -285,10 +451,18 @@ class FormCobro(QWidget):
                 self.venta.garante.calificacion = calif_g
 
         session.commit()
+        self.venta_finalizada.emit(self.venta.id)
         QMessageBox.information(self, "Finalizado", "La venta fue finalizada correctamente.")
         self.close()
 
     def agregar_cuota_mora(self):
+        if not self.venta:
+            QMessageBox.warning(self, "Venta no seleccionada", "Primero seleccioná una venta.")
+            return
+        if self.venta.finalizada:
+            QMessageBox.warning(self, "Venta finalizada", "No se pueden generar cuotas por mora.")
+            return
+
         dialogo = DialogCuotaMora()
         if dialogo.exec() == QDialog.Accepted:
             monto, fecha = dialogo.get_data()
@@ -308,10 +482,12 @@ class FormCobro(QWidget):
             )
             session.add(nueva_cuota)
             session.commit()
+            self.cuotas_actualizadas.emit(self.venta.id)
             QMessageBox.information(self, "Éxito", "Cuota por mora generada correctamente.")
             self.cargar_cuotas()
             self.btn_finalizar.setEnabled(False)
 
+    # ---------------- Habilitar/Deshabilitar campos ----------------
     def _deshabilitar_formulario_finalizado(self):
         self.fecha_input.setDisabled(True)
         self.monto_input.setDisabled(True)
@@ -320,3 +496,16 @@ class FormCobro(QWidget):
         self.btn_guardar.setDisabled(True)
         self.btn_finalizar.setDisabled(True)
         self.btn_mora.setDisabled(True)
+
+    def _deshabilitar_campos_carga(self):
+        self.fecha_input.setDisabled(True)
+        self.monto_input.setDisabled(True)
+        self.tipo_combo.setDisabled(True)
+        self.observaciones_input.setDisabled(True)
+
+    def _habilitar_formulario_activo(self):
+        self.fecha_input.setDisabled(False)
+        self.monto_input.setDisabled(False)
+        self.tipo_combo.setDisabled(False)
+        self.observaciones_input.setDisabled(False)
+        self.btn_guardar.setDisabled(False)

@@ -526,8 +526,16 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(formulario, "Listado de Ventas")
 
     def abrir_form_cobros(self):
-        formulario = FormCobro()
-        self.mostrar_formulario(formulario, "Gestión de Cobros")
+        # Antes: lo embebías en el área central
+        # formulario = FormCobro()
+        # self.mostrar_formulario(formulario, "Gestión de Cobros")
+
+        # Ahora: misma modalidad que desde Listado de Ventas
+        self.form_cobros = FormCobro()
+        self.form_cobros.setWindowModality(Qt.ApplicationModal)
+        self.form_cobros.setAttribute(Qt.WA_DeleteOnClose)
+        self.form_cobros.showMaximized()
+
 
     def cerrar_sesion(self):
         from PySide6.QtWidgets import QApplication
