@@ -2,61 +2,88 @@ from dateutil.relativedelta import relativedelta
 from docx import Document
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
+from decimal import Decimal, ROUND_HALF_UP
 
 from pathlib import Path
 from models import Venta
 from datetime import timedelta
 import tempfile
-import locale
 import os
 
-# Español para fechas
-try:
-    locale.setlocale(locale.LC_TIME, 'es_AR.utf8')
-except:
-    locale.setlocale(locale.LC_TIME, 'es_ES.utf8')
+# ========= Fechas en español sin locale =========
+DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+def fecha_larga(dt):
+    """Devuelve: 'miércoles, 11 de octubre de 2025' sin usar locale."""
+    return f"{DIAS[dt.weekday()]}, {dt.day:02d} de {MESES[dt.month-1]} de {dt.year}"
 
 
-def numero_a_letras(n):
-    unidades = (
-        "", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"
-    )
-    especiales = {10: "diez", 11: "once", 12: "doce", 13: "trece", 14: "catorce", 15: "quince"}
-    decenas = (
-        "", "", "veinte", "treinta", "cuarenta", "cincuenta",
-        "sesenta", "setenta", "ochenta", "noventa"
-    )
+# ========= Números a letras =========
+def numero_a_letras(n: int) -> str:
+    if n == 0:
+        return "cero"
+
+    unidades = ("", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve")
+    especiales = {
+        10: "diez", 11: "once", 12: "doce", 13: "trece", 14: "catorce", 15: "quince",
+        16: "dieciséis", 17: "diecisiete", 18: "dieciocho", 19: "diecinueve"
+    }
+    decenas = ("", "", "veinte", "treinta", "cuarenta", "cincuenta",
+               "sesenta", "setenta", "ochenta", "noventa")
     centenas = ["", "ciento", "doscientos", "trescientos", "cuatrocientos",
                 "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"]
-    if n in especiales:
-        return especiales[n]
-    elif n < 10:
-        return unidades[n]
-    elif n < 100:
-        d, u = divmod(n, 10)
+
+    def _lt100(x: int) -> str:
+        if x in especiales:
+            return especiales[x]
+        d, u = divmod(x, 10)
+        if d == 0:
+            return unidades[u]
+        if d == 2 and u != 0:  # 21-29
+            if u == 1: return "veintiuno"
+            if u == 2: return "veintidós"
+            if u == 3: return "veintitrés"
+            if u == 6: return "veintiséis"
+            return "veinti" + unidades[u]
         return f"{decenas[d]} y {unidades[u]}" if u else decenas[d]
-    elif n < 1000:
+
+    if n < 100:
+        return _lt100(n)
+
+    if n < 1000:
         c, r = divmod(n, 100)
-        return f"{centenas[c]} {numero_a_letras(r)}".strip() if r else "cien"
-    elif n < 1_000_000:
+        if r == 0:
+            return "cien" if c == 1 else centenas[c]
+        return f"{centenas[c]} {_lt100(r)}".strip()
+
+    if n < 1_000_000:
         m, r = divmod(n, 1000)
         miles = "mil" if m == 1 else f"{numero_a_letras(m)} mil"
-        return f"{miles} {numero_a_letras(r)}".strip()
-    elif n < 1_000_000_000:
+        return miles if r == 0 else f"{miles} {numero_a_letras(r)}"
+
+    if n < 1_000_000_000:
         mill, r = divmod(n, 1_000_000)
         millones = "un millón" if mill == 1 else f"{numero_a_letras(mill)} millones"
-        return f"{millones} {numero_a_letras(r)}".strip()
+        return millones if r == 0 else f"{millones} {numero_a_letras(r)}"
+
     return str(n)
 
 
+# ========= Formateo de montos =========
 def monto_formateado(valor):
     return f"$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def monto_con_letras(valor) -> str:
+    # Decimal para evitar errores de flotantes
+    v = Decimal(str(valor)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    entero = int(v)
+    centavos = int((v - Decimal(entero)) * 100)
+    return f"{numero_a_letras(entero).capitalize()} pesos con {centavos:02d}/100"
 
-def monto_con_letras(valor):
-    return f"{numero_a_letras(int(valor)).capitalize()} pesos con {int(round((valor - int(valor)) * 100)):02d}/100"
 
-
+# ========= Armado de datos para plantillas =========
 def preparar_datos_contrato(venta: Venta):
     cliente = venta.cliente
     garante = venta.garante
@@ -76,7 +103,7 @@ def preparar_datos_contrato(venta: Venta):
         texto_periodicidad = "mensuales"
 
     vencs = [
-        f"La cuota {i+1} vence el: {(fecha_inicio_pago + intervalo * i).strftime('%A, %d de %B de %Y').capitalize()}"
+        f"La cuota {i+1} vence el: {fecha_larga(fecha_inicio_pago + intervalo * i)}"
         for i in range(venta.num_cuotas)
     ]
 
@@ -99,21 +126,20 @@ def preparar_datos_contrato(venta: Venta):
         "garante_dni": garante.dni if garante else "________",
         "garante_localidad": garante.localidad if garante else "________",
         "dia": fecha_contrato.day,
-        "mes": fecha_contrato.strftime('%B').capitalize(),
+        "mes": MESES[fecha_contrato.month - 1],  # sin locale
         "anio": fecha_contrato.year,
         "texto_periodicidad": texto_periodicidad,
         "fecha_inicio_pago": fecha_inicio_pago.strftime("%d/%m/%Y")
     }
 
 
-# === GENERADORES ===
-
+# ========= Generadores =========
 def reemplazar_tags_doc(doc: Document, datos: dict):
     for p in doc.paragraphs:
         for key, val in datos.items():
-            if f"{{{{{key}}}}}" in p.text:
-                p.text = p.text.replace(f"{{{{{key}}}}}", str(val))
-
+            tag = f"{{{{{key}}}}}"
+            if tag in p.text:
+                p.text = p.text.replace(tag, str(val))
 
 def generar_contrato_word(venta: Venta, plantilla_path: str) -> str:
     salida_path = tempfile.NamedTemporaryFile(delete=False, suffix=".docx").name
@@ -123,9 +149,8 @@ def generar_contrato_word(venta: Venta, plantilla_path: str) -> str:
     doc.save(salida_path)
     return salida_path
 
-
 def generar_contrato_excel(venta: Venta) -> str:
-    plantilla_path = "plantillas/contrato_excel.xlsx"  # ← fija
+    plantilla_path = "plantillas/contrato_excel.xlsx"  # ruta fija
     salida_path = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx").name
     datos = preparar_datos_contrato(venta)
     wb = load_workbook(plantilla_path)
@@ -137,7 +162,7 @@ def generar_contrato_excel(venta: Venta) -> str:
                 for key, val in datos.items():
                     cell.value = cell.value.replace(f"{{{{{key}}}}}", str(val))
 
-    # Ajustar columnas automáticamente al contenido
+    # Ajustar ancho de columnas al contenido
     for col in ws.columns:
         max_length = 0
         col_letter = get_column_letter(col[0].column)
