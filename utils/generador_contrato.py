@@ -2,6 +2,7 @@ from dateutil.relativedelta import relativedelta
 from docx import Document
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
 from decimal import Decimal, ROUND_HALF_UP
 
 from pathlib import Path
@@ -9,6 +10,48 @@ from models import Venta
 from datetime import timedelta
 import tempfile
 import os
+import warnings
+import shutil
+
+# Silenciar el warning de openpyxl por encabezado/pie
+warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
+
+# ========= Helper: sanitizar plantilla Excel (no toca el original) =========
+def _sanitizar_xlsx_origen(path_in: str) -> str:
+    """
+    Crea una copia temporal del XLSX, limpia encabezados/pies y devuelve la ruta a esa copia.
+    No modifica la plantilla original.
+    """
+    tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx").name
+    shutil.copyfile(path_in, tmp_path)
+    try:
+        wb = load_workbook(tmp_path)
+        ws = wb.active
+        hf = getattr(ws, "header_footer", None)
+        if hf:
+            # API clásica
+            for attr in ("left_header", "center_header", "right_header",
+                         "left_footer", "center_footer", "right_footer"):
+                if hasattr(hf, attr):
+                    setattr(hf, attr, "")
+            for attr in ("differentFirst", "differentOddEven"):
+                if hasattr(hf, attr):
+                    setattr(hf, attr, False)
+            # API alternativa (según versión)
+            for part in ("oddHeader", "oddFooter", "evenHeader", "evenFooter",
+                         "firstHeader", "firstFooter"):
+                obj = getattr(hf, part, None)
+                if obj is not None:
+                    for side in ("left", "center", "right"):
+                        try:
+                            setattr(obj, side, "")
+                        except Exception:
+                            pass
+        wb.save(tmp_path)
+    except Exception:
+        # Si algo falla, seguimos usando la copia (ya duplicada)
+        pass
+    return tmp_path
 
 # ========= Fechas en español sin locale =========
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -18,7 +61,6 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
 def fecha_larga(dt):
     """Devuelve: 'miércoles, 11 de octubre de 2025' sin usar locale."""
     return f"{DIAS[dt.weekday()]}, {dt.day:02d} de {MESES[dt.month-1]} de {dt.year}"
-
 
 # ========= Números a letras =========
 def numero_a_letras(n: int) -> str:
@@ -70,7 +112,6 @@ def numero_a_letras(n: int) -> str:
 
     return str(n)
 
-
 # ========= Formateo de montos =========
 def monto_formateado(valor):
     return f"$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -81,7 +122,6 @@ def monto_con_letras(valor) -> str:
     entero = int(v)
     centavos = int((v - Decimal(entero)) * 100)
     return f"{numero_a_letras(entero).capitalize()} pesos con {centavos:02d}/100"
-
 
 # ========= Armado de datos para plantillas =========
 def preparar_datos_contrato(venta: Venta):
@@ -132,7 +172,6 @@ def preparar_datos_contrato(venta: Venta):
         "fecha_inicio_pago": fecha_inicio_pago.strftime("%d/%m/%Y")
     }
 
-
 # ========= Generadores =========
 def reemplazar_tags_doc(doc: Document, datos: dict):
     for p in doc.paragraphs:
@@ -150,25 +189,60 @@ def generar_contrato_word(venta: Venta, plantilla_path: str) -> str:
     return salida_path
 
 def generar_contrato_excel(venta: Venta) -> str:
-    plantilla_path = "plantillas/contrato_excel.xlsx"  # ruta fija
+    plantilla_path = "plantillas/contrato_excel.xlsx"  # ← ruta fija
+    # Usar copia "sanitizada" para evitar header/footer raros
+    plantilla_limpia = _sanitizar_xlsx_origen(plantilla_path)
+
     salida_path = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx").name
     datos = preparar_datos_contrato(venta)
-    wb = load_workbook(plantilla_path)
+    wb = load_workbook(plantilla_limpia)
     ws = wb.active
 
     for row in ws.iter_rows():
         for cell in row:
-            if cell.value and isinstance(cell.value, str):
-                for key, val in datos.items():
-                    cell.value = cell.value.replace(f"{{{{{key}}}}}", str(val))
+            if isinstance(cell.value, str):
+                text = cell.value
+                es_celda_venc = False
 
-    # Ajustar ancho de columnas al contenido
+                # Reemplazo token por token, detectando si esta celda tenía {{vencimientos}}
+                for key, val in datos.items():
+                    token = f"{{{{{key}}}}}"
+                    if token in text:
+                        if key == "vencimientos":
+                            es_celda_venc = True
+                            # normalizamos saltos de línea
+                            val_str = str(val).replace("\r\n", "\n").replace("\r", "\n")
+                            text = text.replace(token, val_str)
+                        else:
+                            text = text.replace(token, str(val))
+
+                # Si hubo cambios, escribir y (si corresponde) aplicar formato especial
+                if text != cell.value:
+                    cell.value = text
+
+                    if es_celda_venc:
+                        # 1) Forzar multilínea y alineación
+                        cell.alignment = Alignment(
+                            wrap_text=True,
+                            vertical="top",
+                            horizontal="left"
+                        )
+                        # 2) Ajuste de alto de fila
+                        orig_height = ws.row_dimensions[cell.row].height
+                        lineas = text.count("\n") + 1
+                        if orig_height is not None:  # venía fija → la ajustamos
+                            base = 15.0  # aprox alto por línea en puntos
+                            ws.row_dimensions[cell.row].height = max(orig_height, base * lineas * 1.15)
+                        else:
+                            ws.row_dimensions[cell.row].height = None  # auto
+
+    # (opcional) autoajuste de columnas
     for col in ws.columns:
         max_length = 0
         col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            if cell.value:
-                max_length = max(max_length, len(str(cell.value)))
+        for c in col:
+            if c.value:
+                max_length = max(max_length, len(str(c.value)))
         ws.column_dimensions[col_letter].width = max_length + 2
 
     wb.save(salida_path)
