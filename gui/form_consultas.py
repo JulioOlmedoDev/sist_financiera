@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QHBoxLayout,
     QDateEdit, QLineEdit, QTableWidget, QTableWidgetItem, QGridLayout, QFileDialog,
-    QDialog, QDialogButtonBox, QCompleter
+    QDialog, QDialogButtonBox, QCompleter, QSizePolicy
 )
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QIcon
@@ -65,7 +65,7 @@ class FormConsultas(QWidget):
             if widget:
                 widget.setParent(None)
 
-        # rango de fechas estándar
+        # Fila de fechas (0,*)
         self.filtros_layout.addWidget(QLabel("Desde:"), 0, 0, Qt.AlignRight)
         self.fecha_inicio = QDateEdit()
         self.fecha_inicio.setCalendarPopup(True)
@@ -81,50 +81,59 @@ class FormConsultas(QWidget):
         seleccion = self.combo_consulta.currentText()
 
         if seleccion == "Ventas por cliente":
-            self.filtros_layout.addWidget(QLabel("DNI o Apellido:"), 1, 0)
-            self.cliente_input = QLineEdit()
-            self.cliente_input.setPlaceholderText("Ej.: 30123456  ó  Miranda  ó  Miranda Juan")
-            self.filtros_layout.addWidget(self.cliente_input, 1, 1, 1, 3)
+            # === COPIA de la interfaz de "Ventas por producto" ===
+            self.filtros_layout.addWidget(QLabel("DNI o Apellido:"), 1, 0, Qt.AlignRight)
+            self.cliente_combo = QComboBox()
+            self.cliente_combo.setEditable(True)
+            self.cliente_combo.setInsertPolicy(QComboBox.NoInsert)
+            # mismo placeholder-style que en producto (sobre el lineEdit del combo)
+            if self.cliente_combo.lineEdit() is not None:
+                self.cliente_combo.lineEdit().setPlaceholderText("Ej.: 30123456  ó  Miranda  ó  Miranda Juan")
+            # mantenemos el índice en -1 como en producto
+            self.cliente_combo.setCurrentIndex(-1)
+            # mismo agregado en el grid que producto: (1,1) sin spans ni forzados de ancho
+            self.filtros_layout.addWidget(self.cliente_combo, 1, 1)
 
         elif seleccion == "Ventas por producto":
-            # Combo editable con autocompletado
-            self.filtros_layout.addWidget(QLabel("Producto:"), 1, 0)
+            self.filtros_layout.addWidget(QLabel("Producto:"), 1, 0, Qt.AlignRight)
             self.producto_combo = QComboBox()
             self.producto_combo.setEditable(True)
-            self.producto_combo.setInsertPolicy(QComboBox.NoInsert)  # que no agregue ítems nuevos
-            self.producto_combo.setPlaceholderText("Elegí un producto o escribí para buscar…")
+            self.producto_combo.setInsertPolicy(QComboBox.NoInsert)
+
+            # Cargar productos y mostrar placeholder en el lineEdit del combo
             self.cargar_productos_en_combo()
-            # Autocompleter (ignora mayúsculas/minúsculas)
+            if self.producto_combo.lineEdit() is not None:
+                self.producto_combo.lineEdit().setPlaceholderText("Elegí un producto o escribí para buscar…")
+            self.producto_combo.setCurrentIndex(-1)
+
             completer = QCompleter([self.producto_combo.itemText(i) for i in range(self.producto_combo.count())])
             completer.setCaseSensitivity(Qt.CaseInsensitive)
-            # (opcional) que matchee por contiene, no solo por prefijo:
-            # completer.setFilterMode(Qt.MatchContains)
+            # completer.setFilterMode(Qt.MatchContains)  # opcional
             self.producto_combo.setCompleter(completer)
+
             self.filtros_layout.addWidget(self.producto_combo, 1, 1)
 
         elif seleccion == "Ventas por calificación de cliente":
-            self.filtros_layout.addWidget(QLabel("Calificación:"), 1, 0)
+            self.filtros_layout.addWidget(QLabel("Calificación:"), 1, 0, Qt.AlignRight)
             self.calificacion_combo = QComboBox()
             self.calificacion_combo.addItems(["Todas", "Excelente", "Bueno", "Riesgoso", "Incobrable", "Sin Calificación"])
             self.filtros_layout.addWidget(self.calificacion_combo, 1, 1)
 
         elif seleccion == "Ventas por personal":
-            self.filtros_layout.addWidget(QLabel("Tipo (Coordinador/Vendedor/Cobrador):"), 1, 0)
+            self.filtros_layout.addWidget(QLabel("Tipo (Coordinador/Vendedor/Cobrador):"), 1, 0, Qt.AlignRight)
             self.tipo_combo = QComboBox()
             self.tipo_combo.addItems(["Coordinador", "Vendedor", "Cobrador"])
             self.tipo_combo.currentIndexChanged.connect(self.actualizar_empleados_por_rol)
             self.filtros_layout.addWidget(self.tipo_combo, 1, 1)
 
-            self.filtros_layout.addWidget(QLabel("Empleado:"), 2, 0)
+            self.filtros_layout.addWidget(QLabel("Empleado:"), 2, 0, Qt.AlignRight)
             self.empleado_combo = QComboBox()
             self.filtros_layout.addWidget(self.empleado_combo, 2, 1, 1, 1)
-            # inicializar lista
             self.actualizar_empleados_por_rol()
 
     def cargar_productos_en_combo(self):
-        """Carga productos en el combo con userData=producto_id. Deja un ítem vacío al inicio."""
+        """Carga productos en el combo con userData=producto_id. Sin '— Seleccionar —' para permitir placeholder."""
         self.producto_combo.clear()
-        self.producto_combo.addItem("— Seleccionar —", userData=None)
         productos = session.query(Producto).order_by(Producto.nombre.asc()).all()
         for p in productos:
             self.producto_combo.addItem(p.nombre or "", userData=p.id)
@@ -155,7 +164,13 @@ class FormConsultas(QWidget):
             resultados = query.all()
 
         elif seleccion == "Ventas por cliente":
-            valor = (getattr(self, "cliente_input", QLineEdit()).text() or "").strip()
+            # Leemos exactamente como en "producto": del combo editable
+            valor = ""
+            if hasattr(self, "cliente_combo"):
+                valor = (self.cliente_combo.currentText() or "").strip()
+            else:
+                # fallback si por alguna razón no existe el combo
+                valor = ""
 
             if not valor:
                 resultados = []
@@ -182,7 +197,6 @@ class FormConsultas(QWidget):
                         resultados = query.filter(Venta.cliente_id == seleccionado.id).all()
 
         elif seleccion == "Ventas por producto":
-            # 1) Si el usuario eligió un ítem del combo => filtro por producto_id exacto
             producto_id = None
             if hasattr(self, "producto_combo"):
                 producto_id = self.producto_combo.currentData()
@@ -190,7 +204,6 @@ class FormConsultas(QWidget):
             if producto_id:
                 resultados = query.filter(Venta.producto_id == producto_id).all()
             else:
-                # 2) Si escribió texto libre en el combo (editable) y no seleccionó nada => ilike
                 texto = ""
                 if hasattr(self, "producto_combo"):
                     texto = (self.producto_combo.currentText() or "").strip().lower()
@@ -216,7 +229,10 @@ class FormConsultas(QWidget):
                 "Vendedor": Venta.vendedor_id,
                 "Cobrador": Venta.cobrador_id
             }[tipo]
-            resultados = query.filter(campo == empleado_id).all()
+            resultados = query.filter(Venta.cliente.has(), campo == empleado_id).all() if empleado_id else []
+
+            # Nota: si no querés filtrar por "cliente.has()", reemplazá por:
+            # resultados = query.filter(campo == empleado_id).all()
 
         elif seleccion == "Ventas anuladas":
             resultados = query.filter(Venta.anulada == True).all()
@@ -231,10 +247,6 @@ class FormConsultas(QWidget):
     # Diálogo de selección de cliente
     # ---------------------------
     def seleccionar_cliente(self, clientes):
-        """
-        Abre un cuadro de diálogo con una tabla de coincidencias para elegir un cliente exacto.
-        Retorna el objeto Cliente seleccionado o None si se cancela.
-        """
         dlg = QDialog(self)
         dlg.setWindowTitle("Seleccionar cliente")
         dlg.resize(700, 400)
@@ -330,7 +342,6 @@ class FormConsultas(QWidget):
                 c.showPage()
                 c.setFont("Helvetica", 7)
                 y = height - 50
-                # reimprimir headers por nueva página
                 for i, header in enumerate(headers):
                     c.drawString(col_positions[i], y, header)
                 y -= 12
@@ -353,7 +364,6 @@ class FormConsultas(QWidget):
                 c.drawString(col_positions[i], y, str(texto))
             y -= 12
 
-        # Totales
         y -= 10
         c.setFont("Helvetica-Bold", 8)
         c.drawString(col_positions[3], y, "TOTALES:")
