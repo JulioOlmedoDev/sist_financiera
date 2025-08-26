@@ -306,7 +306,7 @@ class FormConsultas(QWidget):
     # Exportar PDF
     # ---------------------------
     def exportar_pdf(self):
-        if not getattr(self, "resultados_actuales", None):
+        if not hasattr(self, "resultados_actuales") or not self.resultados_actuales:
             return
 
         path, _ = QFileDialog.getSaveFileName(self, "Guardar como PDF", "reporte_ventas.pdf", "PDF Files (*.pdf)")
@@ -315,53 +315,136 @@ class FormConsultas(QWidget):
 
         c = canvas.Canvas(path, pagesize=letter)
         width, height = letter
+
+        # ---------- Título ----------
         c.setFont("Helvetica-Bold", 12)
         c.drawString(50, height - 50, "Reporte de Ventas")
-        c.setFont("Helvetica", 7)
-        y = height - 70
+
+        # ---------- Subtítulo: tipo de consulta + período + filtro ----------
+        seleccion = self.combo_consulta.currentText()
+        desde = self.fecha_inicio.date().toString("yyyy-MM-dd")
+        hasta = self.fecha_fin.date().toString("yyyy-MM-dd")
+
+        filtro_desc = ""
+        if seleccion == "Ventas por cliente" and hasattr(self, "cliente_combo"):
+            val = (self.cliente_combo.currentText() or "").strip()
+            if val:
+                filtro_desc = f' | Filtro: "{val}"'
+        elif seleccion == "Ventas por producto" and hasattr(self, "producto_combo"):
+            txt = (self.producto_combo.currentText() or "").strip()
+            if txt:
+                filtro_desc = f' | Producto: "{txt}"'
+        elif seleccion == "Ventas por calificación de cliente" and hasattr(self, "calificacion_combo"):
+            filtro_desc = f' | Calificación: {self.calificacion_combo.currentText()}'
+        elif seleccion == "Ventas por personal" and hasattr(self, "tipo_combo") and hasattr(self, "empleado_combo"):
+            filtro_desc = f' | {self.tipo_combo.currentText()}: {self.empleado_combo.currentText()}'
+        elif seleccion == "Ventas anuladas":
+            filtro_desc = " | (Sólo anuladas)"
+
+        subtitulo = f"Consulta: {seleccion} | Período: {desde} a {hasta}{filtro_desc}"
+
+        # Helper para envolver texto
+        def draw_wrapped_text(canv, text, x, y, max_width, font_name="Helvetica-Oblique", font_size=9, leading=11):
+            canv.setFont(font_name, font_size)
+            words = text.split()
+            line = ""
+            for w in words:
+                test = (line + " " + w).strip()
+                if canv.stringWidth(test, font_name, font_size) <= max_width:
+                    line = test
+                else:
+                    canv.drawString(x, y, line)
+                    y -= leading
+                    line = w
+            if line:
+                canv.drawString(x, y, line)
+                y -= leading
+            return y
+
+        # Posición de inicio tras el subtítulo
+        y = height - 65
+        y = draw_wrapped_text(c, subtitulo, 50, y, max_width=width - 100)
+        y -= 5
+
+        # Columna: bordes izquierdos y derechos
+        col_left = [40, 90, 200, 270, 330, 390, 470, 530]  # izquierda de cada col
+        right_margin = 40
+        col_right = [col_left[i + 1] - 4 if i < len(col_left) - 1 else width - right_margin for i in range(len(col_left))]
 
         headers = ["Fecha", "Cliente", "Producto", "Monto", "Cuotas", "PTF", "Estado", "Calif. Cliente"]
-        col_positions = [40, 90, 200, 270, 330, 390, 470, 530]
+        center_headers_idx = {3, 4, 5}  # Monto, Cuotas, PTF
+        right_align_idx = {3, 4, 5}     # columnas numéricas para filas
 
-        for i, header in enumerate(headers):
-            c.drawString(col_positions[i], y, header)
-        y -= 12
+        def draw_headers(yh):
+            c.setFont("Helvetica", 7)
+            for i, h in enumerate(headers):
+                if i in center_headers_idx:
+                    cx = (col_left[i] + col_right[i]) / 2.0
+                    x = cx - c.stringWidth(h, "Helvetica", 7) / 2.0
+                else:
+                    x = col_left[i]
+                c.drawString(x, yh, h)
+            return yh - 12
 
-        total_monto = 0
-        total_ptf = 0
+        def draw_row(values, yrow, font="Helvetica", size=7):
+            c.setFont(font, size)
+            for i, val in enumerate(values):
+                txt = str(val)
+                if i in right_align_idx:
+                    x = col_right[i] - c.stringWidth(txt, font, size)
+                else:
+                    x = col_left[i]
+                c.drawString(x, yrow, txt)
 
-        for venta in self.resultados_actuales:
-            if y < 40:
+        # Dibujar encabezados al inicio
+        y = draw_headers(y)
+
+        # ---------- Filas ----------
+        total_monto = 0.0
+        total_ptf = 0.0
+
+        for v in self.resultados_actuales:
+            if y < 40:  # salto de página
                 c.showPage()
-                c.setFont("Helvetica", 7)
+                # re-dibujar encabezados en la nueva página
                 y = height - 50
-                for i, header in enumerate(headers):
-                    c.drawString(col_positions[i], y, header)
-                y -= 12
+                y = draw_headers(y)
 
             fila = [
-                str(venta.fecha),
-                f"{venta.cliente.apellidos}, {venta.cliente.nombres}" if venta.cliente else "",
-                venta.producto.nombre if venta.producto else "",
-                f"$ {venta.monto:,.2f}",
-                str(venta.num_cuotas),
-                f"$ {venta.ptf:,.2f}",
-                "Anulada" if venta.anulada else "Finalizada" if venta.finalizada else "Activa",
-                venta.cliente.calificacion if venta.cliente else ""
+                str(v.fecha),
+                f"{v.cliente.apellidos}, {v.cliente.nombres}" if v.cliente else "",
+                v.producto.nombre if v.producto else "",
+                f"$ {float(v.monto or 0):,.2f}",
+                str(int(v.num_cuotas or 0)),
+                f"$ {float(v.ptf or 0):,.2f}",
+                "Anulada" if v.anulada else "Finalizada" if v.finalizada else "Activa",
+                v.cliente.calificacion if v.cliente else ""
             ]
 
-            total_monto += venta.monto or 0
-            total_ptf += venta.ptf or 0
+            total_monto += float(v.monto or 0)
+            total_ptf += float(v.ptf or 0)
 
-            for i, texto in enumerate(fila):
-                c.drawString(col_positions[i], y, str(texto))
+            draw_row(fila, y)
             y -= 12
 
-        y -= 10
+        # ---------- Totales alineados por columnas ----------
+        if y < 40:
+            c.showPage()
+            y = height - 50
+            y = draw_headers(y)
+
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(col_positions[3], y, "TOTALES:")
-        c.drawString(col_positions[3] + 50, y, f"$ {total_monto:,.2f}")
-        c.drawString(col_positions[5], y, f"$ {total_ptf:,.2f}")
+
+        # "TOTALES:" alineado al borde derecho de la columna "Producto" (idx 2)
+        label = "TOTALES:"
+        c.drawString(col_right[2] - c.stringWidth(label, "Helvetica-Bold", 8), y, label)
+
+        # Monto total y PTF total alineados con sus columnas (idx 3 y 5)
+        monto_txt = f"$ {total_monto:,.2f}"
+        c.drawString(col_right[3] - c.stringWidth(monto_txt, "Helvetica-Bold", 8), y, monto_txt)
+
+        ptf_txt = f"$ {total_ptf:,.2f}"
+        c.drawString(col_right[5] - c.stringWidth(ptf_txt, "Helvetica-Bold", 8), y, ptf_txt)
 
         c.save()
 
@@ -370,6 +453,8 @@ class FormConsultas(QWidget):
             os.startfile(path)
         except Exception:
             pass
+
+
 
     # ---------------------------
     # Exportar Excel
