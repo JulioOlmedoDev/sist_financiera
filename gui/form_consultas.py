@@ -1,10 +1,10 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QHBoxLayout,
     QDateEdit, QLineEdit, QTableWidget, QTableWidgetItem, QGridLayout, QFileDialog,
-    QDialog, QDialogButtonBox, QCompleter, QSizePolicy
+    QDialog, QDialogButtonBox, QCompleter, QSizePolicy, QMessageBox
 )
-from PySide6.QtCore import QDate, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QDate, Qt, QUrl
+from PySide6.QtGui import QIcon, QDesktopServices
 from database import session
 from models import Venta, Cliente, Producto, Categoria, Personal
 from reportlab.lib.pagesizes import letter
@@ -43,15 +43,20 @@ class FormConsultas(QWidget):
         self.btn_buscar = QPushButton("Buscar")
         self.btn_buscar.clicked.connect(self.ejecutar_consulta)
 
-        self.btn_exportar = QPushButton("Exportar a PDF")
-        self.btn_exportar.setIcon(QIcon("static/pdf_icon.png"))
-        self.btn_exportar.clicked.connect(self.exportar_pdf)
+        self.btn_exportar_pdf = QPushButton("Exportar a PDF")
+        self.btn_exportar_pdf.setIcon(QIcon("static/pdf_icon.png"))
+        self.btn_exportar_pdf.clicked.connect(self.exportar_pdf)
+
+        self.btn_exportar_excel = QPushButton("Exportar a Excel")
+        self.btn_exportar_excel.clicked.connect(self.exportar_excel)
 
         boton_layout.addWidget(self.btn_buscar)
-        boton_layout.addWidget(self.btn_exportar)
+        boton_layout.addWidget(self.btn_exportar_pdf)
+        boton_layout.addWidget(self.btn_exportar_excel)
         layout.addLayout(boton_layout)
 
         self.setLayout(layout)
+        self.resultados_actuales = []  # para exportaciones
         self.actualizar_filtros()
 
     # ---------------------------
@@ -81,17 +86,14 @@ class FormConsultas(QWidget):
         seleccion = self.combo_consulta.currentText()
 
         if seleccion == "Ventas por cliente":
-            # === COPIA de la interfaz de "Ventas por producto" ===
+            # Mismo layout que "Ventas por producto": combo editable en (1,1)
             self.filtros_layout.addWidget(QLabel("DNI o Apellido:"), 1, 0, Qt.AlignRight)
             self.cliente_combo = QComboBox()
             self.cliente_combo.setEditable(True)
             self.cliente_combo.setInsertPolicy(QComboBox.NoInsert)
-            # mismo placeholder-style que en producto (sobre el lineEdit del combo)
             if self.cliente_combo.lineEdit() is not None:
                 self.cliente_combo.lineEdit().setPlaceholderText("Ej.: 30123456  ó  Miranda  ó  Miranda Juan")
-            # mantenemos el índice en -1 como en producto
             self.cliente_combo.setCurrentIndex(-1)
-            # mismo agregado en el grid que producto: (1,1) sin spans ni forzados de ancho
             self.filtros_layout.addWidget(self.cliente_combo, 1, 1)
 
         elif seleccion == "Ventas por producto":
@@ -108,7 +110,6 @@ class FormConsultas(QWidget):
 
             completer = QCompleter([self.producto_combo.itemText(i) for i in range(self.producto_combo.count())])
             completer.setCaseSensitivity(Qt.CaseInsensitive)
-            # completer.setFilterMode(Qt.MatchContains)  # opcional
             self.producto_combo.setCompleter(completer)
 
             self.filtros_layout.addWidget(self.producto_combo, 1, 1)
@@ -164,14 +165,9 @@ class FormConsultas(QWidget):
             resultados = query.all()
 
         elif seleccion == "Ventas por cliente":
-            # Leemos exactamente como en "producto": del combo editable
             valor = ""
             if hasattr(self, "cliente_combo"):
                 valor = (self.cliente_combo.currentText() or "").strip()
-            else:
-                # fallback si por alguna razón no existe el combo
-                valor = ""
-
             if not valor:
                 resultados = []
             else:
@@ -229,10 +225,7 @@ class FormConsultas(QWidget):
                 "Vendedor": Venta.vendedor_id,
                 "Cobrador": Venta.cobrador_id
             }[tipo]
-            resultados = query.filter(Venta.cliente.has(), campo == empleado_id).all() if empleado_id else []
-
-            # Nota: si no querés filtrar por "cliente.has()", reemplazá por:
-            # resultados = query.filter(campo == empleado_id).all()
+            resultados = query.filter(campo == empleado_id).all()
 
         elif seleccion == "Ventas anuladas":
             resultados = query.filter(Venta.anulada == True).all()
@@ -313,7 +306,7 @@ class FormConsultas(QWidget):
     # Exportar PDF
     # ---------------------------
     def exportar_pdf(self):
-        if not hasattr(self, "resultados_actuales") or not self.resultados_actuales:
+        if not getattr(self, "resultados_actuales", None):
             return
 
         path, _ = QFileDialog.getSaveFileName(self, "Guardar como PDF", "reporte_ventas.pdf", "PDF Files (*.pdf)")
@@ -377,3 +370,159 @@ class FormConsultas(QWidget):
             os.startfile(path)
         except Exception:
             pass
+
+    # ---------------------------
+    # Exportar Excel
+    # ---------------------------
+    def exportar_excel(self):
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment
+        from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.page import PageMargins
+
+        if not getattr(self, "resultados_actuales", None):
+            QMessageBox.information(self, "Exportar a Excel",
+                                    "No hay resultados para exportar. Ejecutá una búsqueda primero.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar como Excel", "reporte_ventas.xlsx", "Excel (*.xlsx)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Reporte"
+
+            # ---------------- Title + Subtitle ----------------
+            # Título centrado en fila 1
+            ws["A1"] = "Reporte de Ventas"
+            ws["A1"].font = Font(bold=True, size=12)
+            ws.merge_cells("A1:H1")
+            ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+
+            # Subtítulo (tipo de consulta + período + filtro)
+            seleccion = self.combo_consulta.currentText()
+            desde = self.fecha_inicio.date().toString("yyyy-MM-dd")
+            hasta = self.fecha_fin.date().toString("yyyy-MM-dd")
+
+            filtro_desc = ""
+            if seleccion == "Ventas por cliente" and hasattr(self, "cliente_combo"):
+                filtro_desc = f' | Filtro: "{(self.cliente_combo.currentText() or "").strip()}"'
+            elif seleccion == "Ventas por producto" and hasattr(self, "producto_combo"):
+                txt = (self.producto_combo.currentText() or "").strip()
+                if txt:
+                    filtro_desc = f' | Producto: "{txt}"'
+            elif seleccion == "Ventas por calificación de cliente" and hasattr(self, "calificacion_combo"):
+                filtro_desc = f' | Calificación: {self.calificacion_combo.currentText()}'
+            elif seleccion == "Ventas por personal" and hasattr(self, "tipo_combo") and hasattr(self, "empleado_combo"):
+                filtro_desc = f' | {self.tipo_combo.currentText()}: {self.empleado_combo.currentText()}'
+            elif seleccion == "Ventas anuladas":
+                filtro_desc = " | (Sólo anuladas)"
+
+            subtitulo = f"Consulta: {seleccion} | Período: {desde} a {hasta}{filtro_desc}"
+            ws["A2"] = subtitulo
+            ws["A2"].font = Font(italic=True, size=10)
+            ws.merge_cells("A2:H2")
+            ws["A2"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+            # ---------------- Headers (fila 3) ----------------
+            headers = ["Fecha", "Cliente", "Producto", "Monto", "Cuotas", "PTF", "Estado", "Calif. Cliente"]
+            ws.append([])  # fila 3 vacía si hicimos A1 y A2? No, mejor escribimos explícito:
+            ws["A3"], ws["B3"], ws["C3"], ws["D3"], ws["E3"], ws["F3"], ws["G3"], ws["H3"] = headers
+            for col in range(1, len(headers) + 1):
+                c = ws.cell(row=3, column=col)
+                c.font = Font(bold=True)
+                c.alignment = Alignment(horizontal="left", vertical="center")
+
+            # ---------------- Data (desde fila 4) ----------------
+            data_start_row = 4
+            total_monto = 0.0
+            total_ptf = 0.0
+            r = data_start_row
+            for v in self.resultados_actuales:
+                fecha_txt = str(v.fecha)
+                cliente_txt = f"{v.cliente.apellidos}, {v.cliente.nombres}" if v.cliente else ""
+                producto_txt = v.producto.nombre if v.producto else ""
+                monto_val = float(v.monto or 0)
+                cuotas_val = int(v.num_cuotas or 0)
+                ptf_val = float(v.ptf or 0)
+                estado_txt = "Anulada" if v.anulada else "Finalizada" if v.finalizada else "Activa"
+                calif_txt = v.cliente.calificacion if v.cliente else ""
+
+                ws.cell(row=r, column=1, value=fecha_txt)
+                ws.cell(row=r, column=2, value=cliente_txt)
+                ws.cell(row=r, column=3, value=producto_txt)
+                ws.cell(row=r, column=4, value=monto_val).number_format = '#,##0.00'
+                ws.cell(row=r, column=5, value=cuotas_val)
+                ws.cell(row=r, column=6, value=ptf_val).number_format = '#,##0.00'
+                ws.cell(row=r, column=7, value=estado_txt)
+                ws.cell(row=r, column=8, value=calif_txt)
+
+                total_monto += monto_val
+                total_ptf += ptf_val
+                r += 1
+
+            # Totales
+            total_row = r
+            ws[f"C{total_row}"] = "TOTALES:"
+            ws[f"C{total_row}"].font = Font(bold=True)
+            ws[f"D{total_row}"] = total_monto
+            ws[f"D{total_row}"].number_format = '#,##0.00'
+            ws[f"F{total_row}"] = total_ptf
+            ws[f"F{total_row}"].number_format = '#,##0.00'
+
+            # ---------------- Column widths ----------------
+            # Ignoramos filas 1 y 2 (título y subtítulo) para que NO inflen la columna A.
+            # Además ponemos mínimos para evitar "#######".
+            min_widths = {1: 11, 2: 24, 3: 18, 4: 14, 5: 7, 6: 14, 7: 10, 8: 12}  # A..H
+            max_width_cap = 50
+
+            for col_idx in range(1, 9):
+                letter = get_column_letter(col_idx)
+                max_len = 0
+                for row in range(3, ws.max_row + 1):  # desde encabezado en adelante
+                    val = ws.cell(row=row, column=col_idx).value
+                    l = len(str(val)) if val is not None else 0
+                    if l > max_len:
+                        max_len = l
+                calc = min(max_len + 2, max_width_cap)
+                ws.column_dimensions[letter].width = max(calc, min_widths.get(col_idx, 10))
+
+            # ---------------- Print setup ----------------
+            ws.page_setup.orientation = 'landscape'
+            ws.page_setup.paperSize = ws.PAPERSIZE_A4
+            ws.page_setup.fitToWidth = 1
+            ws.page_setup.fitToHeight = 0
+            ws.sheet_properties.pageSetUpPr.fitToPage = True
+            ws.page_margins = PageMargins(left=0.25, right=0.25, top=0.5, bottom=0.5)
+            ws.print_area = f"A1:H{ws.max_row}"
+            ws.print_options.horizontalCentered = True
+
+            # Filtro y congelar encabezado
+            ws.auto_filter.ref = f"A3:H{ws.max_row}"
+            ws.freeze_panes = "A4"
+
+            wb.save(path)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error al exportar", f"No se pudo guardar el Excel:\n{e}")
+            return
+
+        # Abrir el archivo resultante
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        except Exception:
+            try:
+                import os
+                os.startfile(path)
+            except Exception:
+                QMessageBox.information(self, "Exportar a Excel", f"Archivo guardado en:\n{path}")
