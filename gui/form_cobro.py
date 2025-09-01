@@ -1,5 +1,3 @@
-# gui/form_cobro.py
-
 import unicodedata
 from datetime import date
 
@@ -7,20 +5,19 @@ from PySide6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QLineEdit, QCompleter,
     QDoubleSpinBox, QInputDialog, QMessageBox, QHBoxLayout, QDialog,
-    QFormLayout, QDialogButtonBox, QSizePolicy
+    QFormLayout, QDialogButtonBox, QSizePolicy, QComboBox
 )
 from PySide6.QtCore import QDate, Qt, Signal
 from database import session
-from models import Venta, Cuota, Cobro
+from models import Venta, Cuota, Cobro, Usuario
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll, DoubleSpinBoxSinScroll
-
 
 # ---------- Constantes de layout fijo ----------
 HEIGHT_SEARCH   = 30   # Buscar Venta (alto de controles)
 HEIGHT_TITLE    = 22   # "Venta #..."
 ROW_HEIGHT      = 24   # alto de cada fila de la tabla
 VISIBLE_ROWS    = 12   # filas visibles fijas
-HEIGHT_FIELDS   = 30   # Fecha/Monto/Tipo
+HEIGHT_FIELDS   = 30   # Fecha/Monto/Tipo/etc
 HEIGHT_OBS      = 30   # Observaciones
 HEIGHT_BUTTONS  = 40   # Botonera
 ROOT_MARGINS    = (8, 6, 8, 8)  # l, t, r, b
@@ -60,9 +57,10 @@ class FormCobro(QWidget):
     cuotas_actualizadas = Signal(int)    # venta_id
     venta_finalizada = Signal(int)       # venta_id
 
-    def __init__(self, venta_id=None):
+    def __init__(self, venta_id=None, usuario_actual: Usuario | None = None):
         super().__init__()
         self.venta_id = venta_id
+        self.usuario_actual = usuario_actual  # ✅ para trazabilidad
         self.venta = session.query(Venta).get(self.venta_id) if self.venta_id else None
 
         # Título de ventana
@@ -73,13 +71,13 @@ class FormCobro(QWidget):
             self.setWindowTitle("Gestión de Cobros")
 
         # --- Layout raíz (márgenes y espacios fijos) ---
-        self.setMinimumSize(850, 700)
+        self.setMinimumSize(950, 720)
         root = QVBoxLayout(self)
         l, t, r, b = ROOT_MARGINS
         root.setContentsMargins(l, t, r, b)
         root.setSpacing(6)
 
-        # ===== Bloque: Buscar venta (SIEMPRE visible, fijo) =====
+        # ===== Bloque: Buscar venta =====
         fila_busqueda = QHBoxLayout()
         fila_busqueda.setContentsMargins(0, 0, 0, 0)
         fila_busqueda.setSpacing(8)
@@ -89,7 +87,6 @@ class FormCobro(QWidget):
         self.buscador.setPlaceholderText("Apellido, DNI o #ID (ej.: Pérez · 30123456 · #125)")
         self.btn_cargar_busqueda = QPushButton("Cargar")
 
-        # Alturas y policies fijos
         for w in (lbl_buscar, self.buscador, self.btn_cargar_busqueda):
             w.setSizePolicy(QSizePolicy.Fixed if w is not self.buscador else QSizePolicy.Expanding,
                             QSizePolicy.Fixed)
@@ -130,24 +127,31 @@ class FormCobro(QWidget):
             cli = self.venta.cliente
             self.buscador.setText(f"Venta #{self.venta.id} – {cli.apellidos}, {cli.nombres}" + (f" (DNI {cli.dni})" if cli.dni else ""))
 
-        # ===== Bloque: Título "Venta #…" (SIEMPRE visible, fijo) =====
+        # ===== Bloque: Título "Venta #…" =====
+        top_row = QHBoxLayout()
         self.lbl_info_venta = QLabel(self._venta_label_text())
-        self.lbl_info_venta.setWordWrap(False)
-        self.lbl_info_venta.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_info_venta.setStyleSheet("font-weight:600; font-size:13px; color:#333; margin:0; padding:0;")
+        top_row.addWidget(self.lbl_info_venta)
+
+        # “Registrará como …”
+        self.lbl_usuario_actual = QLabel("")
+        self._set_usuario_actual_text()
+        self.lbl_usuario_actual.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        top_row.addWidget(self.lbl_usuario_actual, 1)
 
         row_titulo = QWidget()
         lay_titulo = QHBoxLayout(row_titulo)
         lay_titulo.setContentsMargins(0, 0, 0, 0)
-        lay_titulo.addWidget(self.lbl_info_venta)
+        lay_titulo.addLayout(top_row)
         row_titulo.setFixedHeight(HEIGHT_TITLE)
         root.addWidget(row_titulo)
 
-        # ===== Bloque: Tabla de cuotas (ALTO FIJO para 12 filas) =====
+        # ===== Bloque: Tabla de cuotas =====
         self.tabla_cuotas = QTableWidget()
-        self.tabla_cuotas.setColumnCount(7)
+        self.tabla_cuotas.setColumnCount(11)
         self.tabla_cuotas.setHorizontalHeaderLabels([
-            "N°", "Vencimiento", "Fecha Pago", "Monto Original", "Pagado", "Estado", "Concepto"
+            "N°", "Vencimiento", "Fecha Pago", "Monto Original", "Pagado",
+            "Estado", "Concepto", "Método", "Lugar", "Comp.", "Usuario"
         ])
         self.tabla_cuotas.setAlternatingRowColors(True)
         self.tabla_cuotas.horizontalHeader().setStretchLastSection(True)
@@ -159,7 +163,7 @@ class FormCobro(QWidget):
         self.tabla_cuotas.setFixedHeight(tabla_alto)
         root.addWidget(self.tabla_cuotas)
 
-        # ===== Bloque: Fecha / Monto / Tipo (FIJO) =====
+        # ===== Bloque: Fecha / Monto / Tipo / Método / Lugar / Comprobante =====
         fila_campos = QHBoxLayout()
         fila_campos.setContentsMargins(0, 0, 0, 0)
         fila_campos.setSpacing(10)
@@ -178,22 +182,36 @@ class FormCobro(QWidget):
         self.tipo_combo = ComboBoxSinScroll()
         self.tipo_combo.addItems(["entrega", "pago_total", "refinanciacion"])
 
-        for w in (lbl_fecha, self.fecha_input, lbl_monto, self.monto_input, lbl_tipo, self.tipo_combo):
+        lbl_metodo = QLabel("Método:")
+        self.metodo_combo = ComboBoxSinScroll()
+        self.metodo_combo.addItems(["Sin especificar", "Efectivo", "Transferencia", "Depósito", "Tarjeta", "Cheque"])
+
+        lbl_lugar = QLabel("Lugar:")
+        self.lugar_combo = ComboBoxSinScroll()
+        self.lugar_combo.addItems(["Sin especificar", "Oficina", "Cobrador", "Banco", "Pago Fácil", "Rapipago"])
+
+        lbl_comp = QLabel("Comprobante:")
+        self.comprobante_input = QLineEdit()
+        self.comprobante_input.setPlaceholderText("Opcional")
+
+        for w in (lbl_fecha, self.fecha_input, lbl_monto, self.monto_input, lbl_tipo, self.tipo_combo,
+                  lbl_metodo, self.metodo_combo, lbl_lugar, self.lugar_combo,
+                  lbl_comp, self.comprobante_input):
             w.setFixedHeight(HEIGHT_FIELDS)
             if hasattr(w, "setMaximumWidth"):
-                if w is self.fecha_input:
-                    w.setMaximumWidth(140)
-                if w is self.monto_input:
-                    w.setMaximumWidth(160)
-                if w is self.tipo_combo:
-                    w.setMaximumWidth(160)
+                if w is self.fecha_input:        w.setMaximumWidth(140)
+                if w is self.monto_input:        w.setMaximumWidth(160)
+                if w is self.tipo_combo:         w.setMaximumWidth(160)
+                if w is self.metodo_combo:       w.setMaximumWidth(180)
+                if w is self.lugar_combo:        w.setMaximumWidth(180)
+                if w is self.comprobante_input:  w.setMaximumWidth(200)
 
-        fila_campos.addWidget(lbl_fecha)
-        fila_campos.addWidget(self.fecha_input)
-        fila_campos.addWidget(lbl_monto)
-        fila_campos.addWidget(self.monto_input)
-        fila_campos.addWidget(lbl_tipo)
-        fila_campos.addWidget(self.tipo_combo)
+        fila_campos.addWidget(lbl_fecha); fila_campos.addWidget(self.fecha_input)
+        fila_campos.addWidget(lbl_monto); fila_campos.addWidget(self.monto_input)
+        fila_campos.addWidget(lbl_tipo);  fila_campos.addWidget(self.tipo_combo)
+        fila_campos.addWidget(lbl_metodo); fila_campos.addWidget(self.metodo_combo)
+        fila_campos.addWidget(lbl_lugar);  fila_campos.addWidget(self.lugar_combo)
+        fila_campos.addWidget(lbl_comp);   fila_campos.addWidget(self.comprobante_input)
         fila_campos.addStretch(1)
 
         row_campos = QWidget()
@@ -201,7 +219,7 @@ class FormCobro(QWidget):
         row_campos.setFixedHeight(HEIGHT_FIELDS)
         root.addWidget(row_campos)
 
-        # ===== Bloque: Observaciones (FIJO, 1 línea) =====
+        # ===== Bloque: Observaciones =====
         fila_obs = QHBoxLayout()
         fila_obs.setContentsMargins(0, 0, 0, 0)
         fila_obs.setSpacing(8)
@@ -216,7 +234,7 @@ class FormCobro(QWidget):
         row_obs.setFixedHeight(HEIGHT_OBS)
         root.addWidget(row_obs)
 
-        # ===== Bloque: Botones (FIJO) =====
+        # ===== Botonera =====
         botones = QHBoxLayout()
         botones.setContentsMargins(0, 0, 0, 0)
         botones.setSpacing(8)
@@ -258,6 +276,12 @@ class FormCobro(QWidget):
         self.cargar_cuotas()
 
     # ---------------- Utilidades ----------------
+    def _set_usuario_actual_text(self):
+        if self.usuario_actual and getattr(self.usuario_actual, "nombre", None):
+            self.lbl_usuario_actual.setText(f"Registrará como: <b>{self.usuario_actual.nombre}</b>")
+        else:
+            self.lbl_usuario_actual.setText("")
+
     def _normalize(self, texto: str) -> str:
         if not texto:
             return ""
@@ -270,9 +294,8 @@ class FormCobro(QWidget):
         return f"Venta #{self.venta.id} – {c.apellidos}, {c.nombres}"
 
     def _height_for_rows(self, rows: int) -> int:
-        """alto exacto ~ header + filas*ROW_HEIGHT + borde"""
-        header_h = 24  # si en tu tema se ve 1–2 px distinto, ajustá acá
-        frame = 2  # aprox. 1px * 2
+        header_h = 24
+        frame = 2
         return header_h + (rows * ROW_HEIGHT) + frame + 2
 
     # ---------------- Buscar / seleccionar ----------------
@@ -283,17 +306,13 @@ class FormCobro(QWidget):
 
     def _cargar_desde_texto(self):
         txt = self._normalize((self.buscador.text() or "").strip())
-        # Match por display exacto
         if txt in self._display_map:
-            self._cargar_venta(self._display_map[txt])
-            return
-        # Buscar por ID numérico (#123, 123)
+            self._cargar_venta(self._display_map[txt]); return
         num = "".join(ch for ch in txt if ch.isdigit())
         if num.isdigit():
             v = session.query(Venta).get(int(num))
             if v and not v.anulada:
-                self._cargar_venta(v.id)
-                return
+                self._cargar_venta(v.id); return
         QMessageBox.warning(self, "Sin coincidencias", "No se encontraron ventas que coincidan.")
 
     def _cargar_venta(self, venta_id: int):
@@ -308,7 +327,6 @@ class FormCobro(QWidget):
     # ---------------- Carga de cuotas + habilitaciones ----------------
     def cargar_cuotas(self):
         if not self.venta:
-            # sin venta: deshabilitar campos de carga
             self.tabla_cuotas.setRowCount(0)
             self._deshabilitar_campos_carga()
             self.btn_finalizar.setEnabled(False)
@@ -334,6 +352,19 @@ class FormCobro(QWidget):
             else:
                 estado, color = "Pendiente", Qt.white
 
+            # Tomar datos del último cobro aplicado a esta cuota (si lo hay)
+            ultimo_cb = None
+            if getattr(c, "cobros_aplicados", None):
+                # ya viene join='joined', por lo que suele estar en memoria
+                ordenados = sorted(c.cobros_aplicados, key=lambda x: x.id or 0, reverse=True)
+                if ordenados:
+                    ultimo_cb = ordenados[0]
+
+            usuario = ultimo_cb.registrado_por.nombre if (ultimo_cb and ultimo_cb.registrado_por) else ""
+            metodo  = ultimo_cb.metodo or "" if ultimo_cb else ""
+            lugar   = ultimo_cb.lugar or "" if ultimo_cb else ""
+            comp    = ultimo_cb.comprobante or "" if ultimo_cb else ""
+
             self.tabla_cuotas.setItem(i, 0, QTableWidgetItem(str(c.numero)))
             self.tabla_cuotas.setItem(i, 1, QTableWidgetItem(c.fecha_vencimiento.strftime("%d/%m/%Y")))
             self.tabla_cuotas.setItem(i, 2, QTableWidgetItem(c.fecha_pago.strftime("%d/%m/%Y") if c.fecha_pago else ""))
@@ -343,6 +374,10 @@ class FormCobro(QWidget):
             item_estado.setBackground(color)
             self.tabla_cuotas.setItem(i, 5, item_estado)
             self.tabla_cuotas.setItem(i, 6, QTableWidgetItem(c.concepto or ""))
+            self.tabla_cuotas.setItem(i, 7, QTableWidgetItem(metodo))
+            self.tabla_cuotas.setItem(i, 8, QTableWidgetItem(lugar))
+            self.tabla_cuotas.setItem(i, 9, QTableWidgetItem(comp))
+            self.tabla_cuotas.setItem(i, 10, QTableWidgetItem(usuario))
 
         # Habilitaciones fijas
         cuotas_normales = [c for c in self.cuotas if not getattr(c, 'refinanciada', False)]
@@ -375,12 +410,27 @@ class FormCobro(QWidget):
             QMessageBox.warning(self, "Error", "Ingresá un monto mayor a $0.")
             return
 
+        # Datos nuevos
+        metodo = self.metodo_combo.currentText()
+        if metodo == "Sin especificar":
+            metodo = None
+        lugar = self.lugar_combo.currentText()
+        if lugar == "Sin especificar":
+            lugar = None
+        comprobante = (self.comprobante_input.text() or "").strip() or None
+
         cobro = Cobro(
             venta_id=self.venta.id,
             fecha=self.fecha_input.date().toPython(),
             monto=monto,
             tipo=self.tipo_combo.currentText(),
-            observaciones=self.observaciones_input.text()
+            observaciones=self.observaciones_input.text(),
+            # trazabilidad
+            registrado_por_id=getattr(getattr(self.usuario_actual, "id", None), "__int__", lambda: None)() if self.usuario_actual else None,
+            # extras
+            metodo=metodo,
+            lugar=lugar,
+            comprobante=comprobante
         )
         session.add(cobro)
 
@@ -395,6 +445,9 @@ class FormCobro(QWidget):
             if cuota.monto_pagado >= cuota.monto_original:
                 cuota.pagada = True
                 cuota.fecha_pago = self.fecha_input.date().toPython()
+            # vincular cobro aplicado a esta cuota solo si hubo impacto
+            if pago > 0:
+                cobro.cuota = cuota
             if restante <= 0:
                 break
 
@@ -402,6 +455,10 @@ class FormCobro(QWidget):
         self.cobro_registrado.emit(self.venta.id)
         QMessageBox.information(self, "Éxito", "Cobro registrado correctamente.")
         self.cargar_cuotas()
+
+        # limpiar campos “rápidos” (comprobante y observaciones suelen cambiar)
+        self.comprobante_input.clear()
+        self.observaciones_input.clear()
 
     def finalizar_venta(self):
         if not self.venta:
@@ -492,6 +549,9 @@ class FormCobro(QWidget):
         self.fecha_input.setDisabled(True)
         self.monto_input.setDisabled(True)
         self.tipo_combo.setDisabled(True)
+        self.metodo_combo.setDisabled(True)
+        self.lugar_combo.setDisabled(True)
+        self.comprobante_input.setDisabled(True)
         self.observaciones_input.setDisabled(True)
         self.btn_guardar.setDisabled(True)
         self.btn_finalizar.setDisabled(True)
@@ -501,11 +561,17 @@ class FormCobro(QWidget):
         self.fecha_input.setDisabled(True)
         self.monto_input.setDisabled(True)
         self.tipo_combo.setDisabled(True)
+        self.metodo_combo.setDisabled(True)
+        self.lugar_combo.setDisabled(True)
+        self.comprobante_input.setDisabled(True)
         self.observaciones_input.setDisabled(True)
 
     def _habilitar_formulario_activo(self):
         self.fecha_input.setDisabled(False)
         self.monto_input.setDisabled(False)
         self.tipo_combo.setDisabled(False)
+        self.metodo_combo.setDisabled(False)
+        self.lugar_combo.setDisabled(False)
+        self.comprobante_input.setDisabled(False)
         self.observaciones_input.setDisabled(False)
         self.btn_guardar.setDisabled(False)

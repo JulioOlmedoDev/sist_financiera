@@ -150,6 +150,7 @@ class Venta(Base):
     domicilio_cobro_preferido = Column(String(20))
     anulada = Column(Boolean, default=False)
     finalizada = Column(Boolean, default=False)
+    creada_por_id = Column(Integer, ForeignKey('usuarios.id'), nullable=True)
 
     plan_pago = Column(
         Enum('diaria','semanal','mensual', name='plan_pago_enum'),
@@ -165,6 +166,7 @@ class Venta(Base):
     cobrador = relationship("Personal", foreign_keys=[cobrador_id])
     cuotas = relationship("Cuota", back_populates="venta", cascade="all, delete-orphan")
     cobros = relationship("Cobro", back_populates="venta", cascade="all, delete-orphan")
+    creada_por = relationship("Usuario", foreign_keys=[creada_por_id], lazy="joined")
 
 class Cuota(Base):
     __tablename__ = 'cuotas'
@@ -195,8 +197,20 @@ class Cobro(Base):
     observaciones = Column(Text)
     cuota_id = Column(Integer, ForeignKey('cuotas.id'), nullable=True)
 
+    # ✅ ya existentes si seguiste pasos anteriores:
+    registrado_por_id = Column(Integer, ForeignKey('usuarios.id'), nullable=True)
+    caja = Column(String(50), nullable=True)
+    turno = Column(String(20), nullable=True)
+
+    # ✅ NUEVOS:
+    metodo = Column(String(30), nullable=True)       # "Efectivo", "Transferencia", etc.
+    lugar = Column(String(30), nullable=True)        # "Banco", "Rapipago", etc.
+    comprobante = Column(String(50), nullable=True)  # nro/txt libre
+
     venta = relationship("Venta", back_populates="cobros")
     cuota = relationship("Cuota", backref="cobros_aplicados", lazy="joined")
+    registrado_por = relationship("Usuario", foreign_keys=[registrado_por_id])
+
 
 class Tasa(Base):
     __tablename__ = "tasas"

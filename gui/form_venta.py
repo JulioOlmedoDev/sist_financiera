@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QCursor
 from PySide6.QtCore import Signal, QDate, QTimer, Qt, QEvent
 from database import session
-from models import Cliente, Garante, Producto, Personal, Venta, Cuota, Tasa
+from models import Cliente, Garante, Producto, Personal, Venta, Cuota, Tasa, Cobro
 from gui.form_cliente import FormCliente
 from gui.form_garante import FormGarante
 from datetime import date
@@ -15,6 +15,7 @@ import os
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
 from utils.generador_contrato import generar_contrato_word, generar_contrato_excel
 from utils.generador_pagare import generar_pagare_word, generar_pagare_excel
+from sqlalchemy import desc
 
 
 class ConfirmarVentaDialog(QDialog):
@@ -47,8 +48,9 @@ class ConfirmarVentaDialog(QDialog):
 class FormVenta(QWidget):
     sale_saved = Signal()
 
-    def __init__(self, venta_id=None):
+    def __init__(self, venta_id=None, usuario_actual=None):
         super().__init__()
+        self.usuario_actual = usuario_actual
         self.setWindowTitle("Crear Venta" if not venta_id else "Editar Venta")
         self.setGeometry(300, 200, 600, 800)
         self.venta_id = venta_id
@@ -369,10 +371,12 @@ class FormVenta(QWidget):
         if not venta:
             QMessageBox.critical(self, "Error", "Venta no encontrada.")
             return self.close()
+
         self.venta_existente = venta
         es_finalizada = venta.finalizada
         es_activa = not venta.anulada and not venta.finalizada
 
+        # --- Datos base ---
         self.cliente_input.setText(f"{venta.cliente.apellidos}, {venta.cliente.nombres} (DNI {venta.cliente.dni})")
         if venta.garante:
             self.garante_input.setText(f"{venta.garante.apellidos}, {venta.garante.nombres} (DNI {venta.garante.dni})")
@@ -386,7 +390,8 @@ class FormVenta(QWidget):
             self.btn_nuevo_garante, self.btn_refresh_garante, self.btn_calcular
         ]
         if es_finalizada or not es_activa:
-            for w in campos_bloqueados: w.setDisabled(True)
+            for w in campos_bloqueados:
+                w.setDisabled(True)
 
         if hasattr(self, 'chk_anulada'):
             self.chk_anulada.setChecked(venta.anulada)
@@ -401,7 +406,8 @@ class FormVenta(QWidget):
             val = getattr(venta, attr)
             if val:
                 idx = combo.findData(val)
-                if idx >= 0: combo.setCurrentIndex(idx)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
 
         self.plan_pago_combo.setCurrentText(venta.plan_pago)
         self.monto_input.setValue(venta.monto or 0)
@@ -413,17 +419,35 @@ class FormVenta(QWidget):
         self.tna_input.setValue(venta.tna or 0)
         self.tea_input.setValue(venta.tea or 0)
         idx = self.domicilio_combo.findText(venta.domicilio_cobro_preferido or "")
-        if idx >= 0: self.domicilio_combo.setCurrentIndex(idx)
+        if idx >= 0:
+            self.domicilio_combo.setCurrentIndex(idx)
         if venta.fecha_inicio_pago:
             self.fecha_inicio_input.setDate(QDate(venta.fecha_inicio_pago))
 
+        # --- Trazabilidad (siempre visible) ---
+        if venta.creada_por:
+            lbl_cp = QLabel("Creada por:"); lbl_cp.setStyleSheet(self.label_style)
+            self.form.addRow(lbl_cp, QLabel(venta.creada_por.nombre))
+
+        ultimo_cobro = (
+            session.query(Cobro)
+            .filter_by(venta_id=venta.id)
+            .order_by(desc(Cobro.id))
+            .first()
+        )
+        if ultimo_cobro and ultimo_cobro.registrado_por:
+            lbl_uc = QLabel("Último cobro cargado por:"); lbl_uc.setStyleSheet(self.label_style)
+            self.form.addRow(lbl_uc, QLabel(ultimo_cobro.registrado_por.nombre))
+
+        # --- Controles extra si está finalizada ---
         if venta.finalizada:
             lbl_cli = QLabel("Calificación Cliente:"); lbl_cli.setStyleSheet(self.label_style)
             self.calif_cliente_combo = ComboBoxSinScroll()
             self.calif_cliente_combo.addItems(["Excelente", "Bueno", "Riesgoso", "Incobrable"])
             if venta.cliente.calificacion:
                 idx = self.calif_cliente_combo.findText(venta.cliente.calificacion)
-                if idx >= 0: self.calif_cliente_combo.setCurrentIndex(idx)
+                if idx >= 0:
+                    self.calif_cliente_combo.setCurrentIndex(idx)
             self.form.addRow(lbl_cli, self.calif_cliente_combo)
 
             if venta.garante:
@@ -432,7 +456,8 @@ class FormVenta(QWidget):
                 self.calif_garante_combo.addItems(["Excelente", "Bueno", "Riesgoso", "Incobrable"])
                 if venta.garante.calificacion:
                     idx2 = self.calif_garante_combo.findText(venta.garante.calificacion)
-                    if idx2 >= 0: self.calif_garante_combo.setCurrentIndex(idx2)
+                    if idx2 >= 0:
+                        self.calif_garante_combo.setCurrentIndex(idx2)
                 self.form.addRow(lbl_gar, self.calif_garante_combo)
 
     # --- Cargas ---
@@ -564,7 +589,8 @@ class FormVenta(QWidget):
                 tea=self.tea_input.value(),
                 domicilio_cobro_preferido=self.domicilio_combo.currentText(),
                 anulada=False,
-                descripcion=None
+                descripcion=None,
+                creada_por_id=(self.usuario_actual.id if getattr(self, "usuario_actual", None) else None)
             )
             session.add(venta); session.commit()
 

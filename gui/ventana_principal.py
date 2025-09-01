@@ -507,7 +507,7 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(FormGarante(), "Gestión de Garantes")
 
     def abrir_form_venta(self):
-        formulario = FormVenta()
+        formulario = FormVenta(usuario_actual=self.usuario)
         formulario.sale_saved.connect(self.abrir_listado_ventas)
         self.mostrar_formulario(formulario, "Gestión de Ventas")
 
@@ -536,11 +536,10 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(FormGestionGarantes(), "Gestión de Garantes")
 
     def abrir_listado_ventas(self):
-        self.mostrar_formulario(FormVentas(), "Listado de Ventas")
+        self.mostrar_formulario(FormVentas(usuario_actual=self.usuario), "Listado de Ventas")  
 
     def abrir_form_cobros(self):
-        # Modal como en el listado de ventas
-        self.form_cobros = FormCobro()
+        self.form_cobros = FormCobro(usuario_actual=self.usuario) 
         self.form_cobros.setWindowModality(Qt.ApplicationModal)
         self.form_cobros.setAttribute(Qt.WA_DeleteOnClose)
         self.form_cobros.showMaximized()

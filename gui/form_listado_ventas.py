@@ -5,18 +5,20 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from database import session
-from models import Venta, Cliente
+from models import Venta, Cobro, Cliente
 from gui.form_venta import FormVenta
 from utils.generador_contrato import generar_contrato_word, generar_contrato_excel
 from utils.generador_pagare import generar_pagare_word, generar_pagare_excel
-from gui.form_cobro import FormCobro
 import os
 import platform
 import unicodedata
+from sqlalchemy import desc
+
 
 class FormVentas(QWidget):
-    def __init__(self):
+    def __init__(self, usuario_actual=None):
         super().__init__()
+        self.usuario_actual = usuario_actual
         self.setWindowTitle("Gestión de Ventas")
 
         layout = QVBoxLayout(self)
@@ -28,7 +30,9 @@ class FormVentas(QWidget):
         layout.addWidget(titulo)
 
         self.buscador = QLineEdit()
-        self.buscador.setPlaceholderText("Buscar por apellido, nombre, DNI, producto o estado (activa, finalizada, anulada, mora)")
+        self.buscador.setPlaceholderText(
+            "Buscar por apellido, nombre, DNI, producto o estado (activa, finalizada, anulada, mora)"
+        )
         self.buscador.textChanged.connect(self.filtrar_ventas)
         layout.addWidget(self.buscador)
 
@@ -157,25 +161,54 @@ class FormVentas(QWidget):
         if not v:
             QMessageBox.warning(self, "Error", "Venta no encontrada.")
             return
+
         cliente = v.cliente
         garante = v.garante
         producto = v.producto
-        msg = f"<b>ID:</b> {v.id}<br><b>Fecha:</b> {v.fecha.strftime('%d/%m/%Y') if v.fecha else ''}<br>" \
-              f"<b>Cliente:</b> {cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})<br>"
-        if v.finalizada and cliente.calificacion:
-            msg += f"<b>Calificación Cliente:</b> {cliente.calificacion}<br>"
+
+        # Cabecera
+        msg_parts = []
+        msg_parts.append(f"<b>ID:</b> {v.id}")
+        msg_parts.append(f"<b>Fecha:</b> {v.fecha.strftime('%d/%m/%Y') if v.fecha else ''}")
+        if cliente:
+            msg_parts.append(f"<b>Cliente:</b> {cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})")
+            if v.finalizada and cliente.calificacion:
+                msg_parts.append(f"<b>Calificación Cliente:</b> {cliente.calificacion}")
+
         if garante:
-            msg += f"<b>Garante:</b> {garante.apellidos}, {garante.nombres} (DNI {garante.dni})<br>" \
-                   + (f"<b>Calificación Garante:</b> {garante.calificacion}<br>" if v.finalizada and garante.calificacion else "")
-        msg += f"<b>Producto:</b> {producto.nombre if producto else ''}<br>" \
-               f"<b>Plan de Pago:</b> {v.plan_pago.capitalize() if v.plan_pago else ''}<br>" \
-               f"<b>Monto:</b> ${v.monto:,.2f}<br>" \
-               f"<b>Cuotas:</b> {v.num_cuotas} x ${v.valor_cuota:,.2f}<br>" \
-               f"<b>Personal:</b> Coordinador: {v.coordinador.nombres if v.coordinador else ''} / " \
-               f"Vendedor: {v.vendedor.nombres if v.vendedor else ''} / " \
-               f"Cobrador: {v.cobrador.nombres if v.cobrador else ''}<br>" \
-               f"<b>Estado:</b> {'Anulada' if v.anulada else ('Finalizada' if v.finalizada else 'Activa')}"
-        QMessageBox.information(self, "Detalle de Venta", msg)
+            fila_garante = f"<b>Garante:</b> {garante.apellidos}, {garante.nombres} (DNI {garante.dni})"
+            if v.finalizada and garante.calificacion:
+                fila_garante += f"<br><b>Calificación Garante:</b> {garante.calificacion}"
+            msg_parts.append(fila_garante)
+
+        msg_parts.append(f"<b>Producto:</b> {producto.nombre if producto else ''}")
+        msg_parts.append(f"<b>Plan de Pago:</b> {v.plan_pago.capitalize() if v.plan_pago else ''}")
+        msg_parts.append(f"<b>Monto:</b> ${v.monto:,.2f}")
+        msg_parts.append(f"<b>Cuotas:</b> {v.num_cuotas} x ${v.valor_cuota:,.2f}")
+        msg_parts.append(
+            f"<b>Personal:</b> Coordinador: {v.coordinador.nombres if v.coordinador else ''} / "
+            f"Vendedor: {v.vendedor.nombres if v.vendedor else ''} / "
+            f"Cobrador: {v.cobrador.nombres if v.cobrador else ''}"
+        )
+
+        # --- Trazabilidad ---
+        if v.creada_por:
+            msg_parts.append(f"<b>Creada por:</b> {v.creada_por.nombre}")
+
+        ultimo_cobro = (
+            session.query(Cobro)
+            .filter_by(venta_id=v.id)
+            .order_by(desc(Cobro.id))
+            .first()
+        )
+        if ultimo_cobro and ultimo_cobro.registrado_por:
+            msg_parts.append(f"<b>Último cobro cargado por:</b> {ultimo_cobro.registrado_por.nombre}")
+
+        # Estado
+        estado = "Anulada" if v.anulada else ("Finalizada" if v.finalizada else "Activa")
+        msg_parts.append(f"<b>Estado:</b> {estado}")
+
+        QMessageBox.information(self, "Detalle de Venta", "<br>".join(msg_parts))
 
     def editar_venta(self, venta_id):
         venta = session.query(Venta).get(venta_id)
@@ -186,11 +219,20 @@ class FormVentas(QWidget):
             QMessageBox.warning(self, "No editable", "No se puede editar una venta anulada.")
             return
         if venta.finalizada:
-            if QMessageBox.question(self, "Edición limitada", "Solo podés cambiar calificaciones. ¿Continuar?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            if QMessageBox.question(
+                self, "Edición limitada",
+                "Solo podés cambiar calificaciones. ¿Continuar?",
+                QMessageBox.Yes | QMessageBox.No
+            ) != QMessageBox.Yes:
                 return
         else:
-            if QMessageBox.question(self, "Edición limitado", "Solo podés marcar anulada. ¿Continuar?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            if QMessageBox.question(
+                self, "Edición limitada",
+                "Solo podés marcar anulada. ¿Continuar?",
+                QMessageBox.Yes | QMessageBox.No
+            ) != QMessageBox.Yes:
                 return
+
         self.form = FormVenta(venta_id=venta_id)
         self.form.setWindowModality(Qt.ApplicationModal)
         self.form.setAttribute(Qt.WA_DeleteOnClose)
@@ -267,14 +309,36 @@ class FormVentas(QWidget):
         dlg.exec()
 
     def abrir_cobros(self, venta_id):
-        self.form = FormCobro(venta_id=venta_id)
+        # Import local para evitar ciclos si los hay
+        from gui.form_cobro import FormCobro
+
+        # Pasar el usuario actual si la clase lo tiene seteado
+        usuario = getattr(self, "usuario_actual", None)
+
+        # Instanciar el form de cobros con venta precargada y usuario actual
+        self.form = FormCobro(venta_id=venta_id, usuario_actual=usuario)
+
+        # Título con datos del cliente (si existen)
         venta = session.query(Venta).get(venta_id)
         if venta and venta.cliente:
-            cliente = venta.cliente
-            self.form.setWindowTitle(f"Gestión de Cobros – Venta #{venta.id} – {cliente.apellidos}, {cliente.nombres}")
+            c = venta.cliente
+            self.form.setWindowTitle(f"Gestión de Cobros – Venta #{venta.id} – {c.apellidos}, {c.nombres}")
+
+        # 🔗 Conectar señales para refrescar listado automáticamente
+        def _refrescar(_venta_id=None):
+            # refresca todo el listado; si querés optimizamos luego solo esa fila
+            self.cargar_datos()
+
+        self.form.cobro_registrado.connect(_refrescar)
+        self.form.cuotas_actualizadas.connect(_refrescar)
+        self.form.venta_finalizada.connect(_refrescar)
+
+        # Mostrar como ventana modal maximizada
         self.form.setWindowModality(Qt.ApplicationModal)
         self.form.setAttribute(Qt.WA_DeleteOnClose)
         self.form.showMaximized()
+
+        # Fallback: si cierra sin emitir señal, refrescar igual
         self.form.closeEvent = self._refrescar_al_cerrar
 
     # ---------- filtro ----------
@@ -314,28 +378,3 @@ class FormVentas(QWidget):
     def _refrescar_al_cerrar(self, event):
         self.cargar_datos()
         event.accept()
-
-
-    def abrir_cobros(self, venta_id):
-        self.form = FormCobro(venta_id=venta_id)
-        venta = session.query(Venta).get(venta_id)
-        if venta and venta.cliente:
-            cliente = venta.cliente
-            self.form.setWindowTitle(f"Gestión de Cobros – Venta #{venta.id} – {cliente.apellidos}, {cliente.nombres}")
-
-        # 🔗 Conectar señales para refrescar el listado automáticamente
-        def _refrescar(_venta_id=None):
-            # refresca todo el listado; si querés podemos optimizar a solo esa fila
-            self.cargar_datos()
-
-        self.form.cobro_registrado.connect(_refrescar)
-        self.form.cuotas_actualizadas.connect(_refrescar)
-        self.form.venta_finalizada.connect(_refrescar)
-
-        self.form.setWindowModality(Qt.ApplicationModal)
-        self.form.setAttribute(Qt.WA_DeleteOnClose)
-        self.form.showMaximized()
-
-        # Fallback: si cierra sin emitir señal, refrescar igual
-        self.form.closeEvent = self._refrescar_al_cerrar
-
