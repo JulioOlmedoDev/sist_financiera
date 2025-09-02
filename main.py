@@ -10,11 +10,23 @@ import sys
 
 app = QApplication(sys.argv)
 ventana_principal = None  # Para que no se destruya la ventana principal
+login_window = None       # <- NUEVO: referencia al login para poder cerrarlo al loguear
 
 def lanzar_ventana_principal(usuario):
-    global ventana_principal
+    global ventana_principal, login_window
+    if usuario is None:
+        QMessageBox.critical(None, "Sesión requerida", "Debés iniciar sesión.")
+        return
+    # Si estaba abierto el login, cerrarlo
+    if login_window is not None:
+        try:
+            login_window.close()
+        except Exception:
+            pass
+
     ventana_principal = VentanaPrincipal(usuario)
     ventana_principal.show()
+
 
 if __name__ == "__main__":
     # ❶ Crear todas las tablas si no existen aún
@@ -38,8 +50,13 @@ if __name__ == "__main__":
             sys.exit(0)
 
     # ❸ Abrir el formulario de login
-    login = LoginForm(on_login_success=lanzar_ventana_principal)
-    login.show()
+    login_window = LoginForm(on_login_success=lanzar_ventana_principal)
+
+    # Si cierran el login SIN haber iniciado sesión (no se abrió la ventana principal), salir.
+    login_window.destroyed.connect(lambda: app.quit() if ventana_principal is None else None)
+
+    login_window.show()
+
 
     # ❹ Iniciar el loop de la aplicación
     sys.exit(app.exec())

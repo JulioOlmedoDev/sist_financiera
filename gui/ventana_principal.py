@@ -75,6 +75,11 @@ class BotonNavegacion(QPushButton):
 class VentanaPrincipal(QMainWindow):
     def __init__(self, usuario):
         super().__init__()
+        if not usuario:
+            QMessageBox.critical(self, "Sesión requerida", "Debés iniciar sesión para usar el sistema.")
+            from PySide6.QtWidgets import QApplication
+            QApplication.quit()
+            return
         self.usuario = usuario  # Usuario logueado
         self.setWindowTitle("CREDANZA - Sistema de Gestión")
         self.setGeometry(100, 100, 1200, 800)
