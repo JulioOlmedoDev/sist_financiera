@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QDate, Qt, QUrl
 from PySide6.QtGui import QIcon, QDesktopServices
 from database import session
-from models import Venta, Cliente, Producto, Categoria, Personal
+from models import Venta, Cliente, Producto, Categoria, Personal, Cobro
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -25,7 +25,8 @@ class FormConsultas(QWidget):
             "Ventas por producto",
             "Ventas por calificación de cliente",
             "Ventas por personal",
-            "Ventas anuladas"
+            "Ventas anuladas",
+            "Cobros por fecha"
         ])
         self.combo_consulta.currentIndexChanged.connect(self.actualizar_filtros)
         layout.addWidget(QLabel("Seleccione el tipo de consulta:"))
@@ -132,6 +133,13 @@ class FormConsultas(QWidget):
             self.filtros_layout.addWidget(self.empleado_combo, 2, 1, 1, 1)
             self.actualizar_empleados_por_rol()
 
+        # 👇 NUEVO: al final de la función, antes del return implícito
+        sel = self.combo_consulta.currentText()
+        es_cobros = (sel == "Cobros por fecha")
+        # Por ahora deshabilitamos exportar en Cobros para no romper el formato de ventas
+        self.btn_exportar_pdf.setEnabled(not es_cobros)
+        self.btn_exportar_excel.setEnabled(not es_cobros)
+
     def cargar_productos_en_combo(self):
         """Carga productos en el combo con userData=producto_id. Sin '— Seleccionar —' para permitir placeholder."""
         self.producto_combo.clear()
@@ -160,6 +168,24 @@ class FormConsultas(QWidget):
         fin = self.fecha_fin.date().toPython()
 
         query = session.query(Venta).filter(Venta.fecha >= inicio, Venta.fecha <= fin)
+
+        if seleccion == "Cobros por fecha":
+            # Traemos cobros entre fechas (inclusive), con join a Venta para mostrar cliente
+            resultados_cobros = (
+                session.query(Cobro)
+                .join(Venta, Cobro.venta_id == Venta.id)
+                .filter(Cobro.fecha >= inicio, Cobro.fecha <= fin)
+                .order_by(Cobro.fecha.asc(), Cobro.id.asc())
+                .all()
+            )
+
+            # Guardamos por separado para un posible export futuro (no usamos las exportaciones de ventas)
+            self.resultados_cobros = resultados_cobros
+            self.resultados_actuales = []  # vacío a propósito para no confundir a exportaciones de ventas
+
+            self.poblar_tabla_cobros(resultados_cobros)
+            return
+
 
         if seleccion == "Ventas por fecha":
             resultados = query.all()
@@ -302,10 +328,85 @@ class FormConsultas(QWidget):
 
         self.tabla.resizeColumnsToContents()
 
+    def poblar_tabla_cobros(self, cobros):
+        self.tabla.setRowCount(0)
+        self.tabla.setColumnCount(0)
+        if not cobros:
+            return
+
+        headers = ["Fecha", "Venta #", "Cliente", "Cuota", "Monto", "Tipo", "Método", "Lugar", "Comprobante", "Usuario"]
+        self.tabla.setColumnCount(len(headers))
+        self.tabla.setHorizontalHeaderLabels(headers)
+
+        total = 0.0
+        self.tabla.setRowCount(len(cobros) + 1)  # +1 para fila de total
+
+        for r, c in enumerate(cobros):
+            cliente_txt = ""
+            if c.venta and c.venta.cliente:
+                cli = c.venta.cliente
+                cliente_txt = f"{cli.apellidos}, {cli.nombres}"
+
+            usuario_txt = ""
+            # si existe relación registrado_por, usamos su nombre
+            try:
+                usuario_txt = c.registrado_por.nombre if getattr(c, "registrado_por", None) else ""
+            except Exception:
+                usuario_txt = ""
+
+            self.tabla.setItem(r, 0, QTableWidgetItem(str(c.fecha or "")))
+            self.tabla.setItem(r, 1, QTableWidgetItem(str(c.venta_id or "")))
+            self.tabla.setItem(r, 2, QTableWidgetItem(cliente_txt))
+            # Texto para la columna "Cuota": numero de cuota si existe; si no, etiqueta por tipo
+            try:
+                if getattr(c, "cuota", None) and getattr(c.cuota, "numero", None) is not None:
+                    cuota_txt = str(c.cuota.numero)      # si tenés relación Cobro.cuota -> Cuota
+                elif c.cuota_id:
+                    cuota_txt = str(c.cuota_id)          # fallback si no hay relación cargada
+                else:
+                    if c.tipo == "entrega":
+                        cuota_txt = "Entrega"
+                    elif c.tipo == "pago_total":
+                        cuota_txt = "Pago total"
+                    elif c.tipo == "refinanciacion":
+                        cuota_txt = "Refinanciación"
+                    else:
+                        cuota_txt = ""
+            except Exception:
+                cuota_txt = "Entrega" if c.tipo == "entrega" else ("Pago total" if c.tipo == "pago_total" else "")
+            self.tabla.setItem(r, 3, QTableWidgetItem(cuota_txt))
+            self.tabla.setItem(r, 4, QTableWidgetItem(f"$ {float(c.monto or 0):,.2f}"))
+            self.tabla.setItem(r, 5, QTableWidgetItem(c.tipo or ""))         # entrega, pago_total, etc.
+            self.tabla.setItem(r, 6, QTableWidgetItem(c.metodo or ""))       # Efectivo, Transferencia...
+            self.tabla.setItem(r, 7, QTableWidgetItem(c.lugar or ""))        # Oficina, Banco...
+            self.tabla.setItem(r, 8, QTableWidgetItem(c.comprobante or ""))  # texto libre
+            self.tabla.setItem(r, 9, QTableWidgetItem(usuario_txt))
+
+            total += float(c.monto or 0)
+
+        # Fila TOTAL al final
+        fila_total = len(cobros)
+        self.tabla.setItem(fila_total, 0, QTableWidgetItem("TOTAL"))
+        self.tabla.setSpan(fila_total, 0, 1, 4)  # "TOTAL" ocupa columnas 0..3
+        total_item = QTableWidgetItem(f"$ {total:,.2f}")
+        # un poquito de énfasis
+        font = total_item.font()
+        font.setBold(True)
+        total_item.setFont(font)
+        self.tabla.setItem(fila_total, 4, total_item)
+
+        self.tabla.resizeColumnsToContents()
+        self.tabla.horizontalHeader().setStretchLastSection(True)
+
+
     # ---------------------------
     # Exportar PDF
     # ---------------------------
     def exportar_pdf(self):
+        if self.combo_consulta.currentText() == "Cobros por fecha":
+            QMessageBox.information(self, "Exportar a PDF", "La exportación de Cobros todavía no está disponible.")
+            return
+
         if not hasattr(self, "resultados_actuales") or not self.resultados_actuales:
             return
 
@@ -468,6 +569,11 @@ class FormConsultas(QWidget):
         from openpyxl.styles import Font, Alignment
         from openpyxl.utils import get_column_letter
         from openpyxl.worksheet.page import PageMargins
+
+        if self.combo_consulta.currentText() == "Cobros por fecha":
+            QMessageBox.information(self, "Exportar a Excel", "La exportación de Cobros todavía no está disponible.")
+            return
+
 
         if not getattr(self, "resultados_actuales", None):
             QMessageBox.information(self, "Exportar a Excel",
