@@ -133,12 +133,10 @@ class FormConsultas(QWidget):
             self.filtros_layout.addWidget(self.empleado_combo, 2, 1, 1, 1)
             self.actualizar_empleados_por_rol()
 
-        # 👇 NUEVO: al final de la función, antes del return implícito
-        sel = self.combo_consulta.currentText()
-        es_cobros = (sel == "Cobros por fecha")
-        # Por ahora deshabilitamos exportar en Cobros para no romper el formato de ventas
-        self.btn_exportar_pdf.setEnabled(not es_cobros)
-        self.btn_exportar_excel.setEnabled(not es_cobros)
+        # Habilitamos exportar para todas las consultas (incluido Cobros, ya implementado)
+        self.btn_exportar_pdf.setEnabled(True)
+        self.btn_exportar_excel.setEnabled(True)
+
 
     def cargar_productos_en_combo(self):
         """Carga productos en el combo con userData=producto_id. Sin '— Seleccionar —' para permitir placeholder."""
@@ -162,6 +160,7 @@ class FormConsultas(QWidget):
     def ejecutar_consulta(self):
         self.tabla.setRowCount(0)
         self.tabla.setColumnCount(0)
+        self.resultados_cobros = []
 
         seleccion = self.combo_consulta.currentText()
         inicio = self.fecha_inicio.date().toPython()
@@ -348,41 +347,42 @@ class FormConsultas(QWidget):
                 cliente_txt = f"{cli.apellidos}, {cli.nombres}"
 
             usuario_txt = ""
-            # si existe relación registrado_por, usamos su nombre
             try:
                 usuario_txt = c.registrado_por.nombre if getattr(c, "registrado_por", None) else ""
             except Exception:
                 usuario_txt = ""
 
+            # ----- Cuota: número o etiqueta por tipo -----
+            try:
+                if getattr(c, "cuota", None) and getattr(c.cuota, "numero", None) is not None:
+                    cuota_txt = str(c.cuota.numero)
+                elif c.cuota_id:
+                    cuota_txt = str(c.cuota_id)
+                else:
+                    cuota_txt = "Entrega" if c.tipo == "entrega" else \
+                                "Pago total" if c.tipo == "pago_total" else \
+                                "Refinanciación" if c.tipo == "refinanciacion" else ""
+            except Exception:
+                cuota_txt = "Entrega" if c.tipo == "entrega" else ("Pago total" if c.tipo == "pago_total" else "")
+
             self.tabla.setItem(r, 0, QTableWidgetItem(str(c.fecha or "")))
             self.tabla.setItem(r, 1, QTableWidgetItem(str(c.venta_id or "")))
             self.tabla.setItem(r, 2, QTableWidgetItem(cliente_txt))
-            # Texto para la columna "Cuota": numero de cuota si existe; si no, etiqueta por tipo
-            try:
-                if getattr(c, "cuota", None) and getattr(c.cuota, "numero", None) is not None:
-                    cuota_txt = str(c.cuota.numero)      # si tenés relación Cobro.cuota -> Cuota
-                elif c.cuota_id:
-                    cuota_txt = str(c.cuota_id)          # fallback si no hay relación cargada
-                else:
-                    if c.tipo == "entrega":
-                        cuota_txt = "Entrega"
-                    elif c.tipo == "pago_total":
-                        cuota_txt = "Pago total"
-                    elif c.tipo == "refinanciacion":
-                        cuota_txt = "Refinanciación"
-                    else:
-                        cuota_txt = ""
-            except Exception:
-                cuota_txt = "Entrega" if c.tipo == "entrega" else ("Pago total" if c.tipo == "pago_total" else "")
             self.tabla.setItem(r, 3, QTableWidgetItem(cuota_txt))
-            self.tabla.setItem(r, 4, QTableWidgetItem(f"$ {float(c.monto or 0):,.2f}"))
-            self.tabla.setItem(r, 5, QTableWidgetItem(c.tipo or ""))         # entrega, pago_total, etc.
-            self.tabla.setItem(r, 6, QTableWidgetItem(c.metodo or ""))       # Efectivo, Transferencia...
-            self.tabla.setItem(r, 7, QTableWidgetItem(c.lugar or ""))        # Oficina, Banco...
-            self.tabla.setItem(r, 8, QTableWidgetItem(c.comprobante or ""))  # texto libre
+
+            # Monto -> A LA DERECHA
+            monto_item = QTableWidgetItem(f"$ {float(c.monto or 0):,.2f}")
+            monto_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla.setItem(r, 4, monto_item)
+
+            self.tabla.setItem(r, 5, QTableWidgetItem(c.tipo or ""))
+            self.tabla.setItem(r, 6, QTableWidgetItem(c.metodo or ""))
+            self.tabla.setItem(r, 7, QTableWidgetItem(c.lugar or ""))
+            self.tabla.setItem(r, 8, QTableWidgetItem(c.comprobante or ""))
             self.tabla.setItem(r, 9, QTableWidgetItem(usuario_txt))
 
             total += float(c.monto or 0)
+
 
         # Fila TOTAL al final
         fila_total = len(cobros)
@@ -394,6 +394,10 @@ class FormConsultas(QWidget):
         font.setBold(True)
         total_item.setFont(font)
         self.tabla.setItem(fila_total, 4, total_item)
+        # Anchos sugeridos (podés ajustarlos a gusto)
+        anchos = [85, 55, 260, 70, 120, 95, 95, 95, 140, 80]
+        for i, w in enumerate(anchos):
+            self.tabla.setColumnWidth(i, w)
 
         self.tabla.resizeColumnsToContents()
         self.tabla.horizontalHeader().setStretchLastSection(True)
@@ -403,11 +407,205 @@ class FormConsultas(QWidget):
     # Exportar PDF
     # ---------------------------
     def exportar_pdf(self):
-        if self.combo_consulta.currentText() == "Cobros por fecha":
-            QMessageBox.information(self, "Exportar a PDF", "La exportación de Cobros todavía no está disponible.")
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+
+        sel = self.combo_consulta.currentText()
+
+        # --------- EXPORTAR COBROS ---------
+        if sel == "Cobros por fecha":
+            if not getattr(self, "resultados_cobros", None):
+                QMessageBox.information(self, "Exportar a PDF", "No hay resultados de cobros para exportar.")
+                return
+
+            from reportlab.lib.pagesizes import letter, landscape
+            from reportlab.pdfgen import canvas
+
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Guardar como PDF", "reporte_cobros.pdf", "PDF Files (*.pdf)"
+            )
+            if not path:
+                return
+
+            c = canvas.Canvas(path, pagesize=landscape(letter))  # A4/letter apaisado
+            width, height = landscape(letter)
+
+            # Márgenes y estilo base
+            left_margin = 40
+            right_margin = 40
+            top_margin = 50
+            bottom_margin = 40
+            usable_width = width - left_margin - right_margin
+
+            # Título y subtítulo
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(left_margin, height - top_margin, "Reporte de Cobros")
+            desde = self.fecha_inicio.date().toString("yyyy-MM-dd")
+            hasta = self.fecha_fin.date().toString("yyyy-MM-dd")
+            c.setFont("Helvetica-Oblique", 9)
+            c.drawString(left_margin, height - top_margin - 15, f"Período: {desde} a {hasta}")
+
+            col_defs = [
+                ("Fecha",   60),
+                ("Venta #", 55),
+                ("Cliente", 180),
+                ("Cuota",   50),
+                ("Monto",   105), 
+                ("Tipo",    70),
+                ("Método",  75),
+                ("Lugar",   70),
+                ("Comp.",   120),
+                ("Usuario", 70),
+            ]
+            MONTO_IDX = 4         # índice de la columna Monto
+            GUTTER = 10           # separador visual entre Monto y Tipo
+
+            total_units = sum(w for _, w in col_defs)
+            scale = usable_width / float(total_units)
+
+            columns = []
+            x = left_margin
+            for title, w in col_defs:
+                px = int(w * scale)
+                columns.append([title, x, px])  # mutables
+                x += px
+
+            # 👉 Separación visual entre "Monto" y "Tipo"
+            # Desplaza el inicio de "Tipo" unos px hacia la derecha y compensa su ancho.
+            for i, col in enumerate(columns):
+                if col[0] == "Monto" and i + 1 < len(columns):
+                    GAP = 8  # espacio extra
+                    columns[i + 1][1] += GAP         # correr "Tipo"
+                    columns[i + 1][2] = max(20, columns[i + 1][2] - GAP)  # compensar ancho
+                    break
+
+            # Encabezados
+            y = height - top_margin - 35
+            c.setFont("Helvetica", 8)
+            for i, (title, x_l, w_px) in enumerate(columns):
+                if i == MONTO_IDX:
+                    # centro el título "Monto"
+                    cx = x_l + w_px / 2.0
+                    c.drawCentredString(cx, y, title)
+                else:
+                    c.drawString(x_l, y, title)
+            y -= 12
+            c.line(left_margin, y, width - right_margin, y)
+            y -= 8
+
+            # ⬇️ TOTAL inicializado ANTES del loop (corrige UnboundLocalError)
+            total = 0.0
+
+            # Helpers
+            def cuota_txt_from(cobro):
+                try:
+                    if getattr(cobro, "cuota", None) and getattr(cobro.cuota, "numero", None) is not None:
+                        return str(cobro.cuota.numero)
+                    elif cobro.cuota_id:
+                        return str(cobro.cuota_id)
+                except Exception:
+                    pass
+                if cobro.tipo == "entrega":
+                    return "Entrega"
+                if cobro.tipo == "pago_total":
+                    return "Pago total"
+                if cobro.tipo == "refinanciacion":
+                    return "Refinanciación"
+                return ""
+
+            # Dibuja una fila
+            def draw_row(vals, yrow, font="Helvetica", size=7):
+                c.setFont(font, size)
+                for idx, ((title, x_l, w_px), val) in enumerate(zip(columns, vals)):
+                    txt = "" if val is None else str(val)
+
+                    if idx == MONTO_IDX:
+                        # Monto: alineado a la derecha y sin truncar. Dejamos un gutter.
+                        x_right = x_l + (w_px - GUTTER)
+                        c.drawRightString(x_right, yrow, txt)
+                    else:
+                        # Para el resto, truncado suave si se pasa
+                        max_chars = max(3, int(w_px / 5.7))
+                        if len(txt) > max_chars:
+                            txt = txt[:max_chars - 1] + "…"
+                        c.drawString(x_l, yrow, txt)
+
+
+            # Paginado
+            c.setFont("Helvetica", 7)
+            for cobro in self.resultados_cobros:
+                if y < bottom_margin + 20:
+                    c.showPage()
+                    # Redibujar cabecera por página
+                    c.setFont("Helvetica-Bold", 12)
+                    c.drawString(left_margin, height - top_margin, "Reporte de Cobros")
+                    c.setFont("Helvetica-Oblique", 9)
+                    c.drawString(left_margin, height - top_margin - 15, f"Período: {desde} a {hasta}")
+                    y = height - top_margin - 35
+                    c.setFont("Helvetica", 8)
+                    for title, x_l, w_px in columns:
+                        if title == "Monto":
+                            x_txt = x_l + (w_px - c.stringWidth(title, "Helvetica", 8)) / 2.0
+                        else:
+                            x_txt = x_l
+                        c.drawString(x_txt, y, title)
+                    y -= 12
+                    c.line(left_margin, y, width - right_margin, y)
+                    y -= 8
+                    c.setFont("Helvetica", 7)
+
+                cliente_txt = ""
+                if cobro.venta and cobro.venta.cliente:
+                    cli = cobro.venta.cliente
+                    cliente_txt = f"{cli.apellidos}, {cli.nombres}"
+
+                try:
+                    usuario_txt = cobro.registrado_por.nombre if getattr(cobro, "registrado_por", None) else ""
+                except Exception:
+                    usuario_txt = ""
+
+                fila = [
+                    str(cobro.fecha or ""),
+                    str(cobro.venta_id or ""),
+                    cliente_txt,
+                    cuota_txt_from(cobro),
+                    f"$ {float(cobro.monto or 0):,.2f}",
+                    cobro.tipo or "",
+                    cobro.metodo or "",
+                    cobro.lugar or "",
+                    cobro.comprobante or "",
+                    usuario_txt,
+                ]
+                draw_row(fila, y)
+                total += float(cobro.monto or 0)
+                y -= 11
+
+            # Total final (alineado con Monto)
+            if y < bottom_margin + 20:
+                c.showPage()
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(left_margin, height - top_margin, "Reporte de Cobros")
+                c.setFont("Helvetica-Oblique", 9)
+                c.drawString(left_margin, height - top_margin - 15, f"Período: {desde} a {hasta}")
+                y = height - top_margin - 35
+
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(left_margin, y, "TOTAL")
+            # alineo al borde derecho de "Monto", respetando el GUTTER
+            _, x_monto, w_monto = columns[MONTO_IDX]
+            c.drawRightString(x_monto + (w_monto - GUTTER), y, f"$ {total:,.2f}")
+
+            c.save()
+
+            try:
+                import os
+                os.startfile(path)
+            except Exception:
+                pass
             return
 
-        if not hasattr(self, "resultados_actuales") or not self.resultados_actuales:
+        # --------- EXPORTAR VENTAS (lo de siempre) ---------
+        if not getattr(self, "resultados_actuales", None):
             return
 
         path, _ = QFileDialog.getSaveFileName(self, "Guardar como PDF", "reporte_ventas.pdf", "PDF Files (*.pdf)")
@@ -416,8 +614,6 @@ class FormConsultas(QWidget):
 
         c = canvas.Canvas(path, pagesize=letter)
         width, height = letter
-
-        # ---------- Título ----------
         c.setFont("Helvetica-Bold", 12)
         c.drawString(50, height - 50, "Reporte de Ventas")
 
@@ -507,7 +703,6 @@ class FormConsultas(QWidget):
         for v in self.resultados_actuales:
             if y < 40:  # salto de página
                 c.showPage()
-                # re-dibujar encabezados en la nueva página
                 y = height - 50
                 y = draw_headers(y)
 
@@ -536,11 +731,9 @@ class FormConsultas(QWidget):
 
         c.setFont("Helvetica-Bold", 8)
 
-        # "TOTALES:" alineado al borde derecho de la columna "Producto" (idx 2)
         label = "TOTALES:"
         c.drawString(col_right[2] - c.stringWidth(label, "Helvetica-Bold", 8), y, label)
 
-        # Monto total y PTF total alineados con sus columnas (idx 3 y 5)
         monto_txt = f"$ {total_monto:,.2f}"
         c.drawString(col_right[3] - c.stringWidth(monto_txt, "Helvetica-Bold", 8), y, monto_txt)
 
@@ -548,13 +741,11 @@ class FormConsultas(QWidget):
         c.drawString(col_right[5] - c.stringWidth(ptf_txt, "Helvetica-Bold", 8), y, ptf_txt)
 
         c.save()
-
         try:
             import os
             os.startfile(path)
         except Exception:
             pass
-
 
 
     # ---------------------------
@@ -570,11 +761,151 @@ class FormConsultas(QWidget):
         from openpyxl.utils import get_column_letter
         from openpyxl.worksheet.page import PageMargins
 
-        if self.combo_consulta.currentText() == "Cobros por fecha":
-            QMessageBox.information(self, "Exportar a Excel", "La exportación de Cobros todavía no está disponible.")
+        sel = self.combo_consulta.currentText()
+
+        # --------- EXPORTAR COBROS ---------
+        if sel == "Cobros por fecha":
+            if not getattr(self, "resultados_cobros", None):
+                QMessageBox.information(self, "Exportar a Excel", "No hay resultados de cobros para exportar.")
+                return
+
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Guardar como Excel", "reporte_cobros.xlsx", "Excel (*.xlsx)"
+            )
+            if not path:
+                return
+            if not path.lower().endswith(".xlsx"):
+                path += ".xlsx"
+
+            try:
+                from openpyxl import Workbook
+                from openpyxl.styles import Font, Alignment
+                from openpyxl.utils import get_column_letter
+                from openpyxl.worksheet.page import PageMargins
+
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "Cobros"
+
+                # Título
+                ws["A1"] = "Reporte de Cobros"
+                ws["A1"].font = Font(bold=True, size=12)
+                ws.merge_cells("A1:J1")
+                ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+
+                # Subtítulo
+                desde = self.fecha_inicio.date().toString("yyyy-MM-dd")
+                hasta = self.fecha_fin.date().toString("yyyy-MM-dd")
+                ws["A2"] = f"Período: {desde} a {hasta}"
+                ws["A2"].font = Font(italic=True, size=10)
+                ws.merge_cells("A2:J2")
+                ws["A2"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+                headers = ["Fecha", "Venta #", "Cliente", "Cuota", "Monto", "Tipo", "Método", "Lugar", "Comprobante", "Usuario"]
+                ws.append([])
+                for col, h in enumerate(headers, start=1):
+                    cell = ws.cell(row=3, column=col, value=h)
+                    cell.font = Font(bold=True)
+                    cell.alignment = Alignment(horizontal="left", vertical="center")
+                    ws["E3"].alignment = Alignment(horizontal="center", vertical="center")
+                    ws.cell(row=3, column=5).alignment = Alignment(horizontal="center", vertical="center")
+
+
+                def cuota_txt_from(cobro):
+                    try:
+                        if getattr(cobro, "cuota", None) and getattr(cobro.cuota, "numero", None) is not None:
+                            return str(cobro.cuota.numero)
+                        elif cobro.cuota_id:
+                            return str(cobro.cuota_id)
+                    except Exception:
+                        pass
+                    if cobro.tipo == "entrega":
+                        return "Entrega"
+                    if cobro.tipo == "pago_total":
+                        return "Pago total"
+                    if cobro.tipo == "refinanciacion":
+                        return "Refinanciación"
+                    return ""
+
+                r = 4
+                total = 0.0
+                for cobj in self.resultados_cobros:
+                    cliente_txt = ""
+                    if cobj.venta and cobj.venta.cliente:
+                        cli = cobj.venta.cliente
+                        cliente_txt = f"{cli.apellidos}, {cli.nombres}"
+
+                    try:
+                        usuario_txt = cobj.registrado_por.nombre if getattr(cobj, "registrado_por", None) else ""
+                    except Exception:
+                        usuario_txt = ""
+
+                    ws.cell(row=r, column=1, value=str(cobj.fecha or ""))
+                    ws.cell(row=r, column=2, value=str(cobj.venta_id or ""))
+                    ws.cell(row=r, column=3, value=cliente_txt)
+                    ws.cell(row=r, column=4, value=cuota_txt_from(cobj))
+                    mcell = ws.cell(row=r, column=5, value=float(cobj.monto or 0))
+                    mcell.number_format = '#,##0.00'
+                    mcell.alignment = Alignment(horizontal="right")
+                    tcell = ws.cell(row=r, column=6, value=cobj.tipo or "")
+                    tcell.alignment = Alignment(horizontal="left", indent=1)
+                    ws.cell(row=r, column=7, value=cobj.metodo or "")
+                    ws.cell(row=r, column=8, value=cobj.lugar or "")
+                    ws.cell(row=r, column=9, value=cobj.comprobante or "")
+                    ws.cell(row=r, column=10, value=usuario_txt)
+
+                    total += float(cobj.monto or 0)
+                    r += 1
+
+                # Total
+                ws.cell(row=r, column=1, value="TOTAL").font = Font(bold=True)
+                ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+                tcell = ws.cell(row=r, column=5, value=total)
+                tcell.number_format = '#,##0.00'
+                tcell.font = Font(bold=True)
+                tcell.alignment = Alignment(horizontal="right", vertical="center")
+
+
+                # Anchos: mínimos sensatos + autoajuste limitado
+                minw = [11, 8, 28, 10, 16, 15, 14, 14, 18, 12]
+                for col in range(1, len(headers) + 1):
+                    letter = get_column_letter(col)
+                    max_len = 0
+                    for row in range(3, ws.max_row + 1):
+                        val = ws.cell(row=row, column=col).value
+                        l = len(str(val)) if val is not None else 0
+                        max_len = max(max_len, l)
+                    ws.column_dimensions[letter].width = max(minw[col - 1], min(max_len + 2, 45))
+                ws.column_dimensions['E'].width = ws.column_dimensions['E'].width + 2
+
+                # Impresión: A4 apaisado, ajustar a 1 página de ancho
+                ws.page_setup.orientation = 'landscape'
+                ws.page_setup.paperSize = ws.PAPERSIZE_A4
+                ws.page_setup.fitToWidth = 1
+                ws.page_setup.fitToHeight = 0
+                ws.sheet_properties.pageSetUpPr.fitToPage = True
+                ws.page_margins = PageMargins(left=0.25, right=0.25, top=0.5, bottom=0.5)
+                ws.print_area = f"A1:J{ws.max_row}"
+                ws.auto_filter.ref = f"A3:J{ws.max_row}"
+                ws.freeze_panes = "A4"
+
+                wb.save(path)
+            except Exception as e:
+                QMessageBox.critical(self, "Error al exportar", f"No se pudo guardar el Excel:\n{e}")
+                return
+
+            try:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+            except Exception:
+                try:
+                    import os
+                    os.startfile(path)
+                except Exception:
+                    QMessageBox.information(self, "Exportar a Excel", f"Archivo guardado en:\n{path}")
             return
 
 
+        # --------- EXPORTAR VENTAS (lo de siempre) ---------
         if not getattr(self, "resultados_actuales", None):
             QMessageBox.information(self, "Exportar a Excel",
                                     "No hay resultados para exportar. Ejecutá una búsqueda primero.")
@@ -587,6 +918,7 @@ class FormConsultas(QWidget):
             return
         if not path.lower().endswith(".xlsx"):
             path += ".xlsx"
+
 
         try:
             wb = Workbook()
