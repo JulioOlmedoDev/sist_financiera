@@ -341,6 +341,24 @@ class FormCobro(QWidget):
         header_h = 24
         frame = 2
         return header_h + (rows * ROW_HEIGHT) + frame + 2
+    
+    def _prefill_observaciones(self):
+        """Rellena el campo 'Observaciones' con la última observación NO vacía de esta venta."""
+        if not self.venta:
+            self.observaciones_input.setText("")
+            return
+
+        ultimo_con_obs = (
+            session.query(Cobro)
+            .filter(
+                Cobro.venta_id == self.venta.id,
+                Cobro.observaciones.isnot(None),
+                Cobro.observaciones != ""
+            )
+            .order_by(Cobro.id.desc())
+            .first()
+        )
+        self.observaciones_input.setText(ultimo_con_obs.observaciones if ultimo_con_obs else "")
 
     # ---------------- Buscar / seleccionar ----------------
     def _on_busqueda_activada(self, texto):
@@ -366,6 +384,7 @@ class FormCobro(QWidget):
         c = self.venta.cliente
         self.setWindowTitle(f"Gestión de Cobros – Venta #{self.venta.id} – {c.apellidos}, {c.nombres}")
         self.lbl_info_venta.setText(self._venta_label_text())
+        self._prefill_observaciones()
         self.cargar_cuotas()
 
     # ---------------- Carga de cuotas + habilitaciones ----------------
@@ -436,6 +455,7 @@ class FormCobro(QWidget):
             self.btn_mora.setEnabled(mora_normales)
 
         self.btn_guardar.setEnabled(True)
+        self._prefill_observaciones()
 
     # ---------------- Acciones ----------------
     def registrar_cobro(self):
@@ -449,6 +469,19 @@ class FormCobro(QWidget):
         monto = self.monto_input.value()
         if monto <= 0:
             QMessageBox.warning(self, "Error", "Ingresá un monto mayor a $0.")
+            return
+        
+        msg = (f"Está a punto de registrar un cobro por <b>${monto:,.2f}</b> "
+               f"para la venta #{self.venta.id}.\n\n"
+               f"¿Desea continuar?")
+        resp = QMessageBox.question(
+            self,
+            "Confirmar registro de cobro",
+            msg,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if resp != QMessageBox.Yes:
             return
 
         # datos comunes
