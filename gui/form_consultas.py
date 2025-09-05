@@ -318,9 +318,21 @@ class FormConsultas(QWidget):
             cliente_txt = f"{venta.cliente.apellidos}, {venta.cliente.nombres}" if venta.cliente else ""
             self.tabla.setItem(row, 1, QTableWidgetItem(cliente_txt))
             self.tabla.setItem(row, 2, QTableWidgetItem(venta.producto.nombre if venta.producto else ""))
-            self.tabla.setItem(row, 3, QTableWidgetItem(f"$ {venta.monto:,.2f}"))
-            self.tabla.setItem(row, 4, QTableWidgetItem(str(venta.num_cuotas)))
-            self.tabla.setItem(row, 5, QTableWidgetItem(f"$ {venta.ptf:,.2f}"))
+            # Monto
+            monto_item = QTableWidgetItem(f"$ {venta.monto:,.2f}")
+            monto_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla.setItem(row, 3, monto_item)
+
+            # Cuotas
+            cuotas_item = QTableWidgetItem(str(venta.num_cuotas))
+            cuotas_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla.setItem(row, 4, cuotas_item)
+
+            # PTF
+            ptf_item = QTableWidgetItem(f"$ {venta.ptf:,.2f}")
+            ptf_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla.setItem(row, 5, ptf_item)
+
             estado = "Anulada" if venta.anulada else "Finalizada" if venta.finalizada else "Activa"
             self.tabla.setItem(row, 6, QTableWidgetItem(estado))
             self.tabla.setItem(row, 7, QTableWidgetItem(venta.cliente.calificacion if venta.cliente else ""))
@@ -368,7 +380,9 @@ class FormConsultas(QWidget):
             self.tabla.setItem(r, 0, QTableWidgetItem(str(c.fecha or "")))
             self.tabla.setItem(r, 1, QTableWidgetItem(str(c.venta_id or "")))
             self.tabla.setItem(r, 2, QTableWidgetItem(cliente_txt))
-            self.tabla.setItem(r, 3, QTableWidgetItem(cuota_txt))
+            cuota_item = QTableWidgetItem(cuota_txt)
+            cuota_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla.setItem(r, 3, cuota_item)
 
             # Monto -> A LA DERECHA
             monto_item = QTableWidgetItem(f"$ {float(c.monto or 0):,.2f}")
@@ -664,9 +678,17 @@ class FormConsultas(QWidget):
         y -= 5
 
         # Columna: bordes izquierdos y derechos
-        col_left = [40, 90, 200, 270, 330, 390, 470, 530]  # izquierda de cada col
+        col_left = [40, 90, 200, 270, 330, 390, 485, 545]  # izquierda de cada col
         right_margin = 40
-        col_right = [col_left[i + 1] - 4 if i < len(col_left) - 1 else width - right_margin for i in range(len(col_left))]
+        extra_gap_after = {5: 14}  # 14 px de aire extra
+        col_right = []
+        for i in range(len(col_left)):
+            if i < len(col_left) - 1:
+                base_gap = 4
+                gap = extra_gap_after.get(i, base_gap)
+                col_right.append(col_left[i + 1] - gap)
+            else:
+                col_right.append(width - right_margin)
 
         headers = ["Fecha", "Cliente", "Producto", "Monto", "Cuotas", "PTF", "Estado", "Calif. Cliente"]
         center_headers_idx = {3, 4, 5}  # Monto, Cuotas, PTF
@@ -965,6 +987,9 @@ class FormConsultas(QWidget):
                 c = ws.cell(row=3, column=col)
                 c.font = Font(bold=True)
                 c.alignment = Alignment(horizontal="left", vertical="center")
+            ws["D3"].alignment = Alignment(horizontal="center", vertical="center")  # Monto
+            ws["E3"].alignment = Alignment(horizontal="center", vertical="center")  # Cuotas
+            ws["F3"].alignment = Alignment(horizontal="center", vertical="center")  # PTF
 
             # ---------------- Data (desde fila 4) ----------------
             data_start_row = 4
@@ -1006,7 +1031,7 @@ class FormConsultas(QWidget):
             # ---------------- Column widths ----------------
             # Ignoramos filas 1 y 2 (título y subtítulo) para que NO inflen la columna A.
             # Además ponemos mínimos para evitar "#######".
-            min_widths = {1: 11, 2: 24, 3: 18, 4: 14, 5: 7, 6: 14, 7: 10, 8: 12}  # A..H
+            min_widths = {1: 11, 2: 24, 3: 18, 4: 14, 5: 7, 6: 16, 7: 12, 8: 12}  # A..H
             max_width_cap = 50
 
             for col_idx in range(1, 9):
@@ -1019,6 +1044,15 @@ class FormConsultas(QWidget):
                         max_len = l
                 calc = min(max_len + 2, max_width_cap)
                 ws.column_dimensions[letter].width = max(calc, min_widths.get(col_idx, 10))
+                current_f = ws.column_dimensions["F"].width or 0
+                ws.column_dimensions["F"].width = max(current_f, 18)  # podés subir a 19 si querés más aire
+                
+                from openpyxl.styles import Alignment
+                for r in range(4, ws.max_row + 1):  # datos (de la fila 4 hacia abajo)
+                    c = ws.cell(row=r, column=7)    # col G = 7
+                    # respetamos la alineación por defecto (izquierda) pero con indent
+                    c.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
 
             # ---------------- Print setup ----------------
             ws.page_setup.orientation = 'landscape'
