@@ -470,32 +470,46 @@ class FormCobro(QWidget):
         if monto <= 0:
             QMessageBox.warning(self, "Error", "Ingresá un monto mayor a $0.")
             return
-        
-        msg = (f"Está a punto de registrar un cobro por <b>${monto:,.2f}</b> "
-               f"para la venta #{self.venta.id}.\n\n"
-               f"¿Desea continuar?")
-        resp = QMessageBox.question(
-            self,
-            "Confirmar registro de cobro",
-            msg,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if resp != QMessageBox.Yes:
-            return
 
-        # datos comunes
+        # ======== Confirmación previa ========
         fecha_cobro = self.fecha_input.date().toPython()
         tipo = self.tipo_combo.currentText()
-        obs = self.observaciones_input.text() or None
         metodo = self.metodo_combo.currentText()
         lugar = self.lugar_combo.currentText()
         comp = self.comprobante_input.text() or None
+        obs = self.observaciones_input.text() or None
         user_id = getattr(self.usuario_actual, "id", None)
+
+        venta_nro = f"#{self.venta.id}"
+        monto_html = f"<span style='font-size:15px; font-weight:700;'>$ {monto:,.2f}</span>"
+        detalle_html = " &nbsp;•&nbsp; ".join([
+            f"<b>Fecha:</b> {fecha_cobro.strftime('%d/%m/%Y')}",
+            f"<b>Tipo:</b> {tipo}",
+            f"<b>Método:</b> {metodo}",
+            f"<b>Lugar:</b> {lugar}" if lugar else "",
+            f"<b>Comp.:</b> {comp}" if comp else "",
+            f"<b>Obs.:</b> {obs}" if obs else ""
+        ]).strip(" &nbsp;•&nbsp;")
+
+        mb = QMessageBox(self)
+        mb.setWindowTitle("Confirmar registro de cobro")
+        mb.setIcon(QMessageBox.Question)
+        mb.setTextFormat(Qt.RichText)
+        mb.setText(
+            f"Está a punto de registrar un cobro por {monto_html} en la venta <b>{venta_nro}</b>."
+            "<br><br>"
+            f"{detalle_html}"
+            "<br><br>"
+            "¿Desea continuar?"
+        )
+        mb.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        mb.setDefaultButton(QMessageBox.No)
+        if mb.exec() != QMessageBox.Yes:
+            return
+        # =====================================
 
         restante = monto
 
-        # Recorremos cuotas y vamos aplicando pagos creando 1 registro Cobro POR CUOTA
         for cuota in self.cuotas:
             if cuota.pagada:
                 continue
@@ -508,7 +522,6 @@ class FormCobro(QWidget):
             if pago <= 0:
                 break
 
-            # crear cobro por cuota
             cobro = Cobro(
                 venta_id=self.venta.id,
                 cuota_id=cuota.id,
@@ -523,7 +536,6 @@ class FormCobro(QWidget):
             )
             session.add(cobro)
 
-            # actualizar cuota
             cuota.monto_pagado += pago
             if cuota.monto_pagado >= cuota.monto_original - 1e-6:
                 cuota.pagada = True
@@ -535,8 +547,22 @@ class FormCobro(QWidget):
 
         session.commit()
         self.cobro_registrado.emit(self.venta.id)
-        QMessageBox.information(self, "Éxito", "Cobro registrado correctamente.")
         self.cargar_cuotas()
+
+        # ======== Mensajes finales ========
+        # Siempre mostramos éxito
+        QMessageBox.information(self, "Éxito", "Cobro registrado correctamente.")
+
+        # Si todas las cuotas quedaron pagadas y la venta NO está finalizada → sugerimos finalizar
+        if not self.venta.finalizada and all(c.pagada for c in self.cuotas):
+            QMessageBox.information(
+                self,
+                "Sugerencia",
+                "Todas las cuotas de esta venta están pagadas.\n"
+                "Podés marcar ahora la venta como 'Finalizada' usando el botón correspondiente."
+            )
+
+
 
     def finalizar_venta(self):
         if not self.venta:
