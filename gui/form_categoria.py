@@ -24,7 +24,7 @@ class FormCategoria(QDialog): # Cambiado a QDialog
 
         # Configuración de la ventana
         self.setWindowTitle("Gestión de Categoría" if not self.editando else "Editar Categoría")
-        self.setFixedSize(500, 350)
+        self.setFixedSize(600, 440)
         
         # Aplicar estilos consistentes
         self.setStyleSheet("""
@@ -37,7 +37,7 @@ class FormCategoria(QDialog): # Cambiado a QDialog
                 background-color: #f3e5f5;
                 border: 2px solid #9c27b0;
                 border-radius: 12px;
-                padding: 25px;
+                padding: 0px;
             }
             QLabel {
                 color: #333;
@@ -80,18 +80,19 @@ class FormCategoria(QDialog): # Cambiado a QDialog
         main_card = QFrame()
         main_card.setObjectName("main_card")
         card_layout = QVBoxLayout(main_card)
-        card_layout.setSpacing(15)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+        card_layout.setSpacing(16)
+
         
         # Título principal
-        titulo = QLabel("📁 Nueva Categoría" if not self.editando else "📁 Editar Categoría")
-        titulo.setStyleSheet("""
-            QLabel {
-                font-size: 20px;
-                font-weight: bold;
-                color: #4a148c;
-                margin-bottom: 10px;
-            }
-        """)
+        titulo = QLabel()
+        titulo.setTextFormat(Qt.RichText)
+        titulo.setText(
+            f'<div style="line-height:135%; padding-bottom:2px; color:#4a148c; '
+            f'font-weight:700; font-size:20px;">'
+            f'📁 {"Nueva Categoría" if not self.editando else "Editar Categoría"}'
+            f'</div>'
+        )
         card_layout.addWidget(titulo)
         
         # Línea separadora
@@ -157,7 +158,7 @@ class FormCategoria(QDialog): # Cambiado a QDialog
             botones_principales = QHBoxLayout()
             
             # Botón eliminar a la izquierda
-            self.btn_eliminar = QPushButton("🗑️ Eliminar Categoría")
+            self.btn_eliminar = QPushButton("🗑️ Eliminar")
             self.btn_eliminar.setStyleSheet("""
                 QPushButton {
                     background-color: #e53935;
@@ -196,6 +197,8 @@ class FormCategoria(QDialog): # Cambiado a QDialog
                 }
             """)
             self.btn_guardar.clicked.connect(self.guardar_categoria)
+            for b in (self.btn_eliminar, self.btn_cancelar, self.btn_guardar):
+                b.setFixedSize(150, 44)   # ancho y alto iguales
             
             botones_principales.addWidget(self.btn_cancelar)
             botones_principales.addWidget(self.btn_guardar)

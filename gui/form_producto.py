@@ -18,7 +18,7 @@ class FormProducto(QDialog): # Cambiado a QDialog
         
         # Configuración de la ventana
         self.setWindowTitle("Gestión de Producto" if not self.editando else "Editar Producto")
-        self.setFixedSize(500, 480) # Aumentar altura para más espacio y evitar cortes
+        self.setFixedSize(600, 480) # Aumentar altura para más espacio y evitar cortes
         
         # Aplicar estilos consistentes
         self.setStyleSheet("""
@@ -31,7 +31,7 @@ class FormProducto(QDialog): # Cambiado a QDialog
                 background-color: #f3e5f5;
                 border: 2px solid #9c27b0;
                 border-radius: 12px;
-                padding: 30px; /* Aumentar padding para evitar que el título se corte */
+                padding: 0px;
             }
             QLabel {
                 color: #333;
@@ -74,18 +74,20 @@ class FormProducto(QDialog): # Cambiado a QDialog
         main_card = QFrame()
         main_card.setObjectName("main_card")
         card_layout = QVBoxLayout(main_card)
-        card_layout.setSpacing(15)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+        card_layout.setSpacing(16)
+
         
         # Título principal
-        titulo = QLabel("📦 Nuevo Producto" if not self.editando else "📦 Editar Producto")
-        titulo.setStyleSheet("""
-            QLabel {
-                font-size: 20px;
-                font-weight: bold;
-                color: #4a148c;
-                margin-bottom: 10px;
-            }
-        """)
+        titulo = QLabel()
+        titulo.setTextFormat(Qt.RichText)
+        titulo.setText(
+            f'<div style="line-height:135%; padding-bottom:2px; color:#4a148c; '
+            f'font-weight:700; font-size:20px;">'
+            f'📦 {"Nuevo Producto" if not self.editando else "Editar Producto"}'
+            f'</div>'
+        )
+
         card_layout.addWidget(titulo)
         
         # Línea separadora
@@ -109,7 +111,7 @@ class FormProducto(QDialog): # Cambiado a QDialog
                 font-size: 15px;
                 font-weight: bold;
                 color: #7b1fa2;
-                /* margin-bottom: 0px; Eliminar para que el spacing del layout maneje la separación */
+                margin-bottom: 5px;
             }
         """)
         card_layout.addWidget(nombre_label)
@@ -148,9 +150,6 @@ class FormProducto(QDialog): # Cambiado a QDialog
         """)
         card_layout.addWidget(ayuda_label)
         
-        # Añadir un stretch para empujar los elementos hacia arriba y los botones hacia abajo
-        card_layout.addStretch() 
-
         # Separador antes de botones
         separador = QFrame()
         separador.setFrameShape(QFrame.HLine)
@@ -169,7 +168,7 @@ class FormProducto(QDialog): # Cambiado a QDialog
         if self.editando:
             botones_principales = QHBoxLayout()
             
-            self.btn_eliminar = QPushButton("🗑️ Eliminar Producto")
+            self.btn_eliminar = QPushButton("🗑️ Eliminar")
             self.btn_eliminar.setStyleSheet("""
                 QPushButton {
                     background-color: #e53935;
@@ -207,6 +206,8 @@ class FormProducto(QDialog): # Cambiado a QDialog
                 }
             """)
             self.btn_guardar.clicked.connect(self.guardar_producto)
+            for b in (self.btn_eliminar, self.btn_cancelar, self.btn_guardar):
+                b.setFixedSize(150, 44)   # mismo tamaño que Categoría
             
             botones_principales.addWidget(self.btn_cancelar)
             botones_principales.addWidget(self.btn_guardar)
