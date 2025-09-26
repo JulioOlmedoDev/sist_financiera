@@ -7,14 +7,11 @@ from PySide6.QtCore import Qt, Signal
 from database import session
 from models import Categoria, Producto
 
-class FormCategoria(QDialog): # Cambiado a QDialog
-    # Señal para comunicar acciones al formulario padre (FormListadoProductos)
-    # Argumentos: 'action_type' (str), 'category_id' (int, opcional)
-    # Esta señal ahora se usará para comunicar la intención, no para el cierre directo
+class FormCategoria(QDialog):
     category_action_completed = Signal(str, int)
 
-    def __init__(self, categoria_id=None):
-        super().__init__()
+    def __init__(self, categoria_id=None, parent=None):
+        super().__init__(parent)
         self.categoria_id = categoria_id
         self.editando = categoria_id is not None
         
@@ -25,7 +22,11 @@ class FormCategoria(QDialog): # Cambiado a QDialog
         # Configuración de la ventana
         self.setWindowTitle("Gestión de Categoría" if not self.editando else "Editar Categoría")
         self.setFixedSize(600, 440)
-        
+
+        # Hacer el diálogo explícitamente modal y ocultar el botón de ayuda
+        self.setModal(True)
+        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+
         # Aplicar estilos consistentes
         self.setStyleSheet("""
             QDialog { /* Cambiado a QDialog */
@@ -123,6 +124,9 @@ class FormCategoria(QDialog): # Cambiado a QDialog
         
         self.nombre_input = QLineEdit()
         self.nombre_input.setPlaceholderText("Ingrese el nombre de la categoría...")
+        # Si el usuario tipea, limpiar estilos de error
+        self.nombre_input.textChanged.connect(lambda: self.nombre_input.setStyleSheet(""))
+
         card_layout.addWidget(self.nombre_input)
         
         # Texto de ayuda
@@ -199,6 +203,15 @@ class FormCategoria(QDialog): # Cambiado a QDialog
             self.btn_guardar.clicked.connect(self.guardar_categoria)
             for b in (self.btn_eliminar, self.btn_cancelar, self.btn_guardar):
                 b.setFixedSize(150, 44)   # ancho y alto iguales
+
+            self.btn_eliminar.setToolTip("Eliminar definitivamente la categoría")
+            self.btn_cancelar.setToolTip("Cerrar sin guardar")
+            self.btn_guardar.setToolTip("Guardar cambios")
+
+            self.btn_guardar.setDefault(True)
+            self.btn_guardar.setAutoDefault(True)
+            self.btn_cancelar.setAutoDefault(False)
+            self.btn_eliminar.setAutoDefault(False)
             
             botones_principales.addWidget(self.btn_cancelar)
             botones_principales.addWidget(self.btn_guardar)
@@ -232,6 +245,15 @@ class FormCategoria(QDialog): # Cambiado a QDialog
                 }
             """)
             self.btn_guardar.clicked.connect(self.guardar_categoria)
+
+            # Tooltips y botón por defecto
+            self.btn_cancelar.setToolTip("Cerrar sin guardar")
+            self.btn_guardar.setToolTip("Guardar categoría")
+
+            self.btn_guardar.setDefault(True)
+            self.btn_guardar.setAutoDefault(True)
+            self.btn_cancelar.setAutoDefault(False)
+
             
             botones_layout.addWidget(self.btn_cancelar)
             botones_layout.addWidget(self.btn_guardar)
@@ -249,7 +271,7 @@ class FormCategoria(QDialog): # Cambiado a QDialog
     def cargar_datos(self):
         """Carga los datos de la categoría para edición"""
         try:
-            categoria = session.query(Categoria).get(self.categoria_id)
+            categoria = session.get(Categoria, self.categoria_id)
             if categoria:
                 self.nombre_input.setText(categoria.nombre)
             else:
@@ -285,7 +307,7 @@ class FormCategoria(QDialog): # Cambiado a QDialog
         try:
             if self.editando:
                 # Actualizar categoría existente
-                categoria = session.query(Categoria).get(self.categoria_id)
+                categoria = session.get(Categoria, self.categoria_id)
                 if categoria:
                     categoria.nombre = nombre
                     mensaje_exito = "Categoría actualizada correctamente"
@@ -317,42 +339,39 @@ class FormCategoria(QDialog): # Cambiado a QDialog
             info_box.setStandardButtons(QMessageBox.Ok)
             info_box.exec()
 
-            # --- Nuevo flujo de preguntas (para QDialog) ---
-            if not self.editando: # Solo para nuevas categorías
-                respuesta_nueva_categoria = QMessageBox.question(
-                    self, 
-                    "Continuar", 
-                    "¿Desea crear una nueva categoría?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                
-                if respuesta_nueva_categoria == QMessageBox.Yes:
+            # --- Nuevo flujo post-guardado (para QDialog) ---
+            if not self.editando:  # Solo para nuevas categorías
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Question)
+                msg.setWindowTitle("Continuar")
+                msg.setText("¿Qué querés hacer ahora?")
+                btn_otra = msg.addButton("➕ Otra categoría", QMessageBox.YesRole)
+                btn_prod = msg.addButton("➕ Nuevo producto", QMessageBox.AcceptRole)
+                btn_cerrar = msg.addButton("Cerrar", QMessageBox.RejectRole)
+                msg.exec()
+
+                clicked = msg.clickedButton()
+
+                if clicked is btn_otra:
+                    print("DEBUG: Usuario eligió crear otra categoría. Mantener diálogo abierto.")
                     self.limpiar_formulario()
                     self.setWindowTitle("Gestión de Categoría")
                     self.editando = False
                     self.nombre_input.setFocus()
-                    print("DEBUG: Usuario eligió crear otra categoría. Manteniendo diálogo abierto.") # AÑADE ESTA LÍNEA
-                    return 
+                    return
+
+                elif clicked is btn_prod:
+                    print(f"DEBUG: Usuario eligió crear producto. category_id={self.newly_created_category_id}")
+                    self.create_new_product_flag = True
+                    self.accept()
+
                 else:
-                    respuesta_nuevo_producto = QMessageBox.question(
-                        self, 
-                        "Continuar", 
-                        "¿Desea crear un nuevo producto dentro de esta categoría?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.No
-                    )
-                    
-                    if respuesta_nuevo_producto == QMessageBox.Yes:
-                        self.create_new_product_flag = True # Establecer la bandera
-                        print(f"DEBUG: Usuario eligió crear nuevo producto. Bandera: {self.create_new_product_flag}. ID: {self.newly_created_category_id}. Aceptando diálogo.") # AÑADE ESTA LÍNEA
-                        self.accept() # Cerrar el diálogo con Accepted
-                    else:
-                        print("DEBUG: Usuario NO eligió crear nuevo producto. Aceptando diálogo.") # AÑADE ESTA LÍNEA
-                        self.accept() # Cerrar el diálogo con Accepted (sin crear producto)
-            else: # Si estaba editando, simplemente cerrar
-                print("DEBUG: Editando categoría. Aceptando diálogo.") # AÑADE ESTA LÍNEA
-                self.accept() # Cerrar el diálogo con Accepted
+                    print("DEBUG: Usuario eligió Cerrar.")
+                    self.accept()
+
+            else:
+                print("DEBUG: Editando categoría. Aceptando diálogo.")
+                self.accept()
                 
         except Exception as e:
             session.rollback()
@@ -362,7 +381,7 @@ class FormCategoria(QDialog): # Cambiado a QDialog
     def eliminar_categoria(self):
         """Elimina la categoría después de confirmación"""
         try:
-            categoria = session.query(Categoria).get(self.categoria_id)
+            categoria = session.get(Categoria, self.categoria_id)
             if not categoria:
                 QMessageBox.warning(self, "Error", "Categoría no encontrada")
                 self.reject()

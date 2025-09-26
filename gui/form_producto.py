@@ -2,23 +2,23 @@ from PySide6.QtWidgets import (
     QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, # Cambiado a QDialog
     QComboBox, QMessageBox, QHBoxLayout, QFrame
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from database import session
 from models import Producto, Categoria
 
-class FormProducto(QDialog): # Cambiado a QDialog
-    # Señal para indicar que se ha completado una acción y el listado debe refrescarse
-    # Esta señal ahora se usará para notificar al padre, no para el cierre directo
-    product_action_completed = Signal()
-
-    def __init__(self, producto_id=None):
-        super().__init__()
+class FormProducto(QDialog):  # ...
+    def __init__(self, producto_id=None, parent=None):
+        super().__init__(parent)
         self.producto_id = producto_id
         self.editando = producto_id is not None
         
         # Configuración de la ventana
         self.setWindowTitle("Gestión de Producto" if not self.editando else "Editar Producto")
         self.setFixedSize(600, 480) # Aumentar altura para más espacio y evitar cortes
+
+        self.setModal(True)
+        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+
         
         # Aplicar estilos consistentes
         self.setStyleSheet("""
@@ -118,6 +118,9 @@ class FormProducto(QDialog): # Cambiado a QDialog
         
         self.nombre_input = QLineEdit()
         self.nombre_input.setPlaceholderText("Ingrese el nombre del producto...")
+        # Si el usuario tipea, limpiar estilos de error
+        self.nombre_input.textChanged.connect(lambda: self.nombre_input.setStyleSheet(""))
+
         card_layout.addWidget(self.nombre_input)
         
         # Campo Categoría
@@ -208,6 +211,15 @@ class FormProducto(QDialog): # Cambiado a QDialog
             self.btn_guardar.clicked.connect(self.guardar_producto)
             for b in (self.btn_eliminar, self.btn_cancelar, self.btn_guardar):
                 b.setFixedSize(150, 44)   # mismo tamaño que Categoría
+
+            self.btn_eliminar.setToolTip("Eliminar definitivamente el producto")
+            self.btn_cancelar.setToolTip("Cerrar sin guardar")
+            self.btn_guardar.setToolTip("Guardar cambios")
+
+            self.btn_guardar.setDefault(True)
+            self.btn_guardar.setAutoDefault(True)
+            self.btn_cancelar.setAutoDefault(False)
+            self.btn_eliminar.setAutoDefault(False)
             
             botones_principales.addWidget(self.btn_cancelar)
             botones_principales.addWidget(self.btn_guardar)
@@ -240,6 +252,14 @@ class FormProducto(QDialog): # Cambiado a QDialog
                 }
             """)
             self.btn_guardar.clicked.connect(self.guardar_producto)
+
+            # Tooltips y botón por defecto
+            self.btn_cancelar.setToolTip("Cerrar sin guardar")
+            self.btn_guardar.setToolTip("Guardar producto")
+
+            self.btn_guardar.setDefault(True)
+            self.btn_guardar.setAutoDefault(True)
+            self.btn_cancelar.setAutoDefault(False)
             
             botones_layout.addWidget(self.btn_cancelar)
             botones_layout.addWidget(self.btn_guardar)
@@ -271,7 +291,7 @@ class FormProducto(QDialog): # Cambiado a QDialog
     def cargar_datos(self):
         """Carga los datos del producto para edición."""
         try:
-            producto = session.query(Producto).get(self.producto_id)
+            producto = session.get(Producto, self.producto_id)
             if producto:
                 self.nombre_input.setText(producto.nombre)
                 index = self.categoria_combo.findData(producto.categoria_id)
@@ -326,7 +346,7 @@ class FormProducto(QDialog): # Cambiado a QDialog
 
         try:
             if self.editando:
-                producto = session.query(Producto).get(self.producto_id)
+                producto = session.get(Producto, self.producto_id)
                 if producto:
                     producto.nombre = nombre
                     producto.categoria_id = categoria_id
@@ -341,7 +361,6 @@ class FormProducto(QDialog): # Cambiado a QDialog
             
             session.commit()
             QMessageBox.information(self, "Éxito", mensaje_exito)
-            self.product_action_completed.emit() # Emitir señal para refrescar el listado
             self.accept() # Cerrar el diálogo con Accepted
             
         except Exception as e:
@@ -354,12 +373,11 @@ class FormProducto(QDialog): # Cambiado a QDialog
         confirm = QMessageBox.question(self, "Eliminar", "¿Eliminar este producto?", QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             try:
-                producto = session.query(Producto).get(self.producto_id)
+                producto = session.get(Producto, self.producto_id)
                 if producto:
                     session.delete(producto)
                     session.commit()
                     QMessageBox.information(self, "Eliminado", "Producto eliminado correctamente.")
-                    self.product_action_completed.emit() # Emitir señal para refrescar el listado
                     self.accept() # Cerrar con accept después de eliminar
                 else:
                     QMessageBox.warning(self, "Error", "Producto no encontrado.")

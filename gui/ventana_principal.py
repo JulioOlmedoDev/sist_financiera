@@ -517,10 +517,37 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(formulario, "Gestión de Ventas")
 
     def abrir_form_categoria(self):
-        self.mostrar_formulario(FormCategoria(), "Gestión de Categorías")
+        # Abrir como QDialog modal (NO usar mostrar_formulario acá)
+        dlg = FormCategoria(parent=self)
+        print("DEBUG: Abriendo FormCategoria (menú Productos > Categorías)")
+        result = dlg.exec()
+        print(f"DEBUG: Cerró FormCategoria. result={result} | flag={dlg.create_new_product_flag} | cat_id={dlg.newly_created_category_id}")
+
+        if result == QDialog.Accepted and dlg.create_new_product_flag and dlg.newly_created_category_id:
+            # Si el usuario eligió "+Producto", abrir FormProducto con la categoría preseleccionada
+            cat_id = dlg.newly_created_category_id
+            print(f"DEBUG: Abrir FormProducto con categoría preseleccionada (cat_id={cat_id})")
+            prod = FormProducto(parent=self)
+            # Asegurar combo cargado y preseleccionar
+            prod.cargar_categorias()
+            idx = prod.categoria_combo.findData(cat_id)
+            if idx >= 0:
+                prod.categoria_combo.setCurrentIndex(idx)
+            else:
+                QMessageBox.warning(self, "Aviso", "No encontré la categoría recién creada en el combo.")
+            prod.exec()
+
+        # Al cerrar (haya o no producto), refrescá la vista de listado del panel central
+        self.abrir_listado_productos()
 
     def abrir_form_producto(self):
-        self.mostrar_formulario(FormProducto(), "Gestión de Productos")
+        # También como QDialog modal para ser consistente
+        print("DEBUG: Abriendo FormProducto (menú Productos > Productos)")
+        dlg = FormProducto(parent=self)
+        dlg.exec()
+        # Tras cerrar, refrescar el listado del panel central
+        self.abrir_listado_productos()
+
 
     def abrir_form_personal(self):
         self.mostrar_formulario(FormPersonal(), "Gestión de Personal")

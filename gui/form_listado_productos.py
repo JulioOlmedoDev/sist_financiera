@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout,
     QFrame, QMessageBox, QScrollArea, QSizePolicy, QDialog # Importar QDialog
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from database import session
 from models import Categoria, Producto
 from gui.form_categoria import FormCategoria
@@ -403,25 +403,29 @@ class FormListadoProductos(QWidget):
         
         # Agregar stretch al final
         self.layout_principal.addStretch()
+
     def abrir_nueva_categoria(self):
-        """Abre el formulario para crear una nueva categoría como un QDialog modal."""
         dialog = FormCategoria()
-        print("DEBUG: Abriendo FormCategoria como diálogo modal.") # AÑADE ESTA LÍNEA
-        
-        result = dialog.exec() # Almacenar el resultado para depuración
-        print(f"DEBUG: FormCategoria se cerró con resultado: {result} (Accepted={QDialog.Accepted}, Rejected={QDialog.Rejected})") # AÑADE ESTA LÍNEA
-        print(f"DEBUG: Bandera create_new_product_flag de FormCategoria: {dialog.create_new_product_flag}") # AÑADE ESTA LÍNEA
-        print(f"DEBUG: ID de la nueva categoría de FormCategoria: {dialog.newly_created_category_id}") # AÑADE ESTA LÍNEA
+        print("DEBUG: Abriendo FormCategoria como diálogo modal.")
+        result = dialog.exec()
+        print(f"DEBUG: FormCategoria se cerró con resultado: {result} (Accepted={QDialog.Accepted}, Rejected={QDialog.Rejected})")
+        print(f"DEBUG: create_new_product_flag={dialog.create_new_product_flag} | newly_created_category_id={dialog.newly_created_category_id}")
 
         if result == QDialog.Accepted:
-            self.cargar_listado() # Refrescar el listado principal
             if dialog.create_new_product_flag:
-                # Si el usuario eligió crear un nuevo producto, abrir el formulario de producto
-                print("DEBUG: FormCategoria indicó crear nuevo producto. Llamando a abrir_nuevo_producto.") # AÑADE ESTA LÍNEA
-                self.abrir_nuevo_producto(dialog.newly_created_category_id)
+                cat_id = dialog.newly_created_category_id
+                print(f"DEBUG: Se pidió crear producto. cat_id={cat_id}")
+                # 👉 Deferimos al próximo ciclo del event loop
+                QTimer.singleShot(0, lambda cid=cat_id: self.abrir_nuevo_producto(cid))
+                # ⚠️ Importante: no refrescar ahora; dejalo para después de cerrar FormProducto
+                return
+            else:
+                print("DEBUG: No se solicitó crear producto.")
+                self.cargar_listado()
         else:
-            print("DEBUG: FormCategoria fue cancelado o hubo un error.") # AÑADE ESTA LÍNEA
-            self.cargar_listado() # Refrescar el listado si se canceló o hubo error
+            print("DEBUG: FormCategoria fue cancelado o hubo un error.")
+            self.cargar_listado()
+
 
     def abrir_editar_categoria(self, categoria_id):
         """Abre el formulario para editar una categoría existente como un QDialog modal."""
@@ -433,29 +437,26 @@ class FormListadoProductos(QWidget):
 
     def abrir_nuevo_producto(self, categoria_id=None):
         """Abre el formulario para crear un nuevo producto como un QDialog modal."""
-        print(f"DEBUG: abrir_nuevo_producto llamado con categoria_id: {categoria_id}") # AÑADE ESTA LÍNEA
-        dialog = FormProducto()
-        
+        print(f"DEBUG: abrir_nuevo_producto llamado con categoria_id: {categoria_id}")
+        dialog = FormProducto(parent=self)
+
         # Preseleccionar la categoría si se proporciona un ID
         if categoria_id is not None:
-            dialog.cargar_categorias() # Asegurarse de que las categorías estén cargadas
+            dialog.cargar_categorias()  # Asegurarse de que las categorías estén cargadas
             index = dialog.categoria_combo.findData(categoria_id)
             if index >= 0:
                 dialog.categoria_combo.setCurrentIndex(index)
             else:
                 QMessageBox.warning(self, "Error", "La categoría seleccionada no se encontró en el listado de productos.")
-        
-        result = dialog.exec() # Almacenar el resultado para depuración
-        print(f"DEBUG: FormProducto se cerró con resultado: {result} (Accepted={QDialog.Accepted}, Rejected={QDialog.Rejected})") # AÑADE ESTA LÍNEA
-        
-        if result == QDialog.Accepted:
-            self.cargar_listado() # Refrescar el listado principal
-        else:
-            self.cargar_listado() # Refrescar el listado si se canceló o hubo error
+
+        result = dialog.exec()  # Modal síncrono
+        print(f"DEBUG: FormProducto se cerró con resultado: {result} (Accepted={QDialog.Accepted}, Rejected={QDialog.Rejected})")
+
+        self.cargar_listado()
 
     def abrir_editar_producto(self, producto_id):
         """Abre el formulario para editar un producto existente como un QDialog modal."""
-        dialog = FormProducto(producto_id)
+        dialog = FormProducto(producto_id, parent=self)
         if dialog.exec() == QDialog.Accepted:
             self.cargar_listado() # Refrescar el listado principal
         else:
@@ -464,7 +465,10 @@ class FormListadoProductos(QWidget):
     def eliminar_categoria(self, categoria_id):
         """Elimina una categoría después de confirmación"""
         try:
-            cat = session.query(Categoria).get(categoria_id)
+            cat = session.get(Categoria, categoria_id)
+            if not cat:
+                QMessageBox.warning(self, "Error", "Categoría no encontrada")
+                return
             productos_count = session.query(Producto).filter_by(categoria_id=categoria_id).count()
             
             mensaje = f"¿Estás seguro de eliminar la categoría '{cat.nombre}'?"
@@ -492,7 +496,10 @@ class FormListadoProductos(QWidget):
     def eliminar_producto(self, producto_id):
         """Elimina un producto después de confirmación"""
         try:
-            prod = session.query(Producto).get(producto_id)
+            prod = session.get(Producto, producto_id)
+            if not prod:
+                QMessageBox.warning(self, "Error", "Producto no encontrado")
+                return
             confirm = QMessageBox.question(
                 self, 
                 "Confirmar eliminación", 
