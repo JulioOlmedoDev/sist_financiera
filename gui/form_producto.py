@@ -5,6 +5,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from database import session
 from models import Producto, Categoria
+from sqlalchemy.exc import IntegrityError
+
 
 class FormProducto(QDialog):  # ...
     def __init__(self, producto_id=None, parent=None):
@@ -377,13 +379,21 @@ class FormProducto(QDialog):  # ...
                 if producto:
                     session.delete(producto)
                     session.commit()
+                    print("DEBUG: Producto eliminado OK")
                     QMessageBox.information(self, "Eliminado", "Producto eliminado correctamente.")
-                    self.accept() # Cerrar con accept después de eliminar
+                    self.accept()
                 else:
                     QMessageBox.warning(self, "Error", "Producto no encontrado.")
                     self.reject()
+            except IntegrityError:
+                session.rollback()
+                print("DEBUG: IntegrityError al eliminar producto (tiene ventas)")
+                QMessageBox.warning(self, "No se puede eliminar",
+                                    "Este producto tiene ventas registradas y no puede eliminarse.")
+                self.reject()
             except Exception as e:
                 session.rollback()
+                print(f"DEBUG: Error inesperado al eliminar producto: {e}")
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar:\n{e}")
                 self.reject()
         else:

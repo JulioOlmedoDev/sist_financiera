@@ -487,22 +487,21 @@ class VentanaPrincipal(QMainWindow):
             self.crear_menu_principal()
 
     def mostrar_formulario(self, formulario, titulo):
-        # Actualizar título
         self.titulo_pagina.setText(titulo)
 
-        # Empaquetar en scroll con márgenes
         contenedor = self._wrap_scroll(formulario)
 
-        # Insertar en stack y seleccionar
+        old = self.content_stack.currentWidget()
+
+        # Evitar parpadeo durante el swap
+        self.content_stack.setUpdatesEnabled(False)
         self.content_stack.addWidget(contenedor)
         self.content_stack.setCurrentWidget(contenedor)
+        if old and old is not contenedor:
+            self.content_stack.removeWidget(old)
+            old.deleteLater()
+        self.content_stack.setUpdatesEnabled(True)
 
-        # Limpiar páginas antiguas dejando solo la actual
-        for _ in range(self.content_stack.count() - 1):
-            old = self.content_stack.widget(0)
-            if old is not contenedor:
-                self.content_stack.removeWidget(old)
-                old.deleteLater()
 
     # ---------- Abrir formularios ----------
     def abrir_form_cliente(self):
@@ -562,13 +561,25 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(FormConsultas(), "Consultas Generales")
 
     def abrir_gestion_clientes(self):
-        self.mostrar_formulario(FormGestionClientes(), "Gestión de Clientes")
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            self.mostrar_formulario(FormGestionClientes(), "Gestión de Clientes")
+        finally:
+            QApplication.restoreOverrideCursor()
+
 
     def abrir_gestion_garantes(self):
         self.mostrar_formulario(FormGestionGarantes(), "Gestión de Garantes")
 
     def abrir_listado_ventas(self):
-        self.mostrar_formulario(FormVentas(usuario_actual=self.usuario), "Listado de Ventas")  
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            self.mostrar_formulario(FormVentas(usuario_actual=self.usuario), "Listado de Ventas")
+        finally:
+            QApplication.restoreOverrideCursor()
+
 
     def abrir_form_cobros(self):
         self.form_cobros = FormCobro(usuario_actual=self.usuario) 
@@ -593,7 +604,12 @@ class VentanaPrincipal(QMainWindow):
 
     # ---------- Listados y otros ----------
     def abrir_listado_productos(self):
-        self.mostrar_formulario(FormListadoProductos(), "Listado de Categorías y Productos")
+        from PySide6.QtWidgets import QApplication  # import local, o podés moverlo al encabezado del archivo
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            self.mostrar_formulario(FormListadoProductos(), "Listado de Categorías y Productos")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def abrir_gestion_personal(self):
         self.mostrar_formulario(FormGestionPersonal(), "Listado de Personal")

@@ -3,7 +3,8 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout, QHeaderView, QLineEdit, QMessageBox,
     QDialog, QDialogButtonBox
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
+
 from database import session
 from models import Venta, Cobro, Cliente
 from gui.form_venta import FormVenta
@@ -45,7 +46,8 @@ class FormVentas(QWidget):
         self.tabla.setAlternatingRowColors(True)
         layout.addWidget(self.tabla)
 
-        self.cargar_datos()
+        self._show_loading("Cargando ventas…")
+        QTimer.singleShot(0, self._load_after_paint)
 
         self.setStyleSheet("""
             QLabel#titulo {
@@ -96,63 +98,69 @@ class FormVentas(QWidget):
         self.mostrar_ventas(self.todas_las_ventas)
 
     def mostrar_ventas(self, lista):
-        self.tabla.setRowCount(0)
-        for row_index, venta in enumerate(lista):
-            self.tabla.insertRow(row_index)
-            self.tabla.setItem(row_index, 0, QTableWidgetItem(str(venta.id)))
-            fecha_str = venta.fecha.strftime("%d/%m/%Y") if venta.fecha else ""
-            self.tabla.setItem(row_index, 1, QTableWidgetItem(fecha_str))
-            cliente = venta.cliente
-            cliente_str = f"{cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})" if cliente else ""
-            self.tabla.setItem(row_index, 2, QTableWidgetItem(cliente_str))
-            self.tabla.setItem(row_index, 3, QTableWidgetItem(f"${venta.monto:,.2f}" if venta.monto else ""))
+        self.tabla.setUpdatesEnabled(False)
+        try:
+            self.tabla.clearContents()
+            self.tabla.setRowCount(len(lista))
 
-            # Estado
-            cuotas = venta.cuotas
-            if venta.anulada:
-                estado = "Anulada"
-            elif venta.finalizada:
-                estado = "Finalizada"
-            else:
-                estado = "Activa"
-            con_mora = any(c.pagada and c.fecha_pago and c.fecha_pago > c.fecha_vencimiento for c in cuotas)
-            if con_mora:
-                estado += " ⚠ Mora"
-            item_estado = QTableWidgetItem(estado)
-            if "Mora" in estado:
-                item_estado.setBackground(Qt.yellow)
-            elif estado == "Anulada":
-                item_estado.setBackground(Qt.lightGray)
-            elif estado == "Finalizada":
-                item_estado.setBackground(Qt.green)
-            self.tabla.setItem(row_index, 4, item_estado)
+            for row_index, venta in enumerate(lista):
+                self.tabla.setItem(row_index, 0, QTableWidgetItem(str(venta.id)))
+                fecha_str = venta.fecha.strftime("%d/%m/%Y") if venta.fecha else ""
+                self.tabla.setItem(row_index, 1, QTableWidgetItem(fecha_str))
+                cliente = venta.cliente
+                cliente_str = f"{cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})" if cliente else ""
+                self.tabla.setItem(row_index, 2, QTableWidgetItem(cliente_str))
+                self.tabla.setItem(row_index, 3, QTableWidgetItem(f"${venta.monto:,.2f}" if venta.monto else ""))
 
-            # Personal
-            personal = []
-            if venta.coordinador:
-                personal.append(f"C: {venta.coordinador.nombres}")
-            if venta.vendedor:
-                personal.append(f"V: {venta.vendedor.nombres}")
-            if venta.cobrador:
-                personal.append(f"Cob: {venta.cobrador.nombres}")
-            self.tabla.setItem(row_index, 5, QTableWidgetItem(" / ".join(personal)))
+                # Estado
+                cuotas = venta.cuotas
+                if venta.anulada:
+                    estado = "Anulada"
+                elif venta.finalizada:
+                    estado = "Finalizada"
+                else:
+                    estado = "Activa"
+                con_mora = any(c.pagada and c.fecha_pago and c.fecha_pago > c.fecha_vencimiento for c in cuotas)
+                if con_mora:
+                    estado += " ⚠ Mora"
+                item_estado = QTableWidgetItem(estado)
+                if "Mora" in estado:
+                    item_estado.setBackground(Qt.yellow)
+                elif estado == "Anulada":
+                    item_estado.setBackground(Qt.lightGray)
+                elif estado == "Finalizada":
+                    item_estado.setBackground(Qt.green)
+                self.tabla.setItem(row_index, 4, item_estado)
 
-            # Botones
-            btn_ver = QPushButton("Detalle")
-            btn_ver.clicked.connect(lambda checked=False, vid=venta.id: self.ver_detalle_venta(vid))
-            self.tabla.setCellWidget(row_index, 6, btn_ver)
+                # Personal
+                personal = []
+                if venta.coordinador:
+                    personal.append(f"C: {venta.coordinador.nombres}")
+                if venta.vendedor:
+                    personal.append(f"V: {venta.vendedor.nombres}")
+                if venta.cobrador:
+                    personal.append(f"Cob: {venta.cobrador.nombres}")
+                self.tabla.setItem(row_index, 5, QTableWidgetItem(" / ".join(personal)))
 
-            btn_editar = QPushButton("Editar")
-            btn_editar.clicked.connect(lambda checked=False, vid=venta.id: self.editar_venta(vid))
-            self.tabla.setCellWidget(row_index, 7, btn_editar)
+                # Botones
+                btn_ver = QPushButton("Detalle")
+                btn_ver.clicked.connect(lambda checked=False, vid=venta.id: self.ver_detalle_venta(vid))
+                self.tabla.setCellWidget(row_index, 6, btn_ver)
 
-            btn_doc = QPushButton("Abrir Docs")
-            btn_doc.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_documentos_venta(vid))
-            self.tabla.setCellWidget(row_index, 8, btn_doc)
+                btn_editar = QPushButton("Editar")
+                btn_editar.clicked.connect(lambda checked=False, vid=venta.id: self.editar_venta(vid))
+                self.tabla.setCellWidget(row_index, 7, btn_editar)
 
-            btn_cobros = QPushButton("Cobros")
-            btn_cobros.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_cobros(vid))
-            self.tabla.setCellWidget(row_index, 9, btn_cobros)
+                btn_doc = QPushButton("Abrir Docs")
+                btn_doc.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_documentos_venta(vid))
+                self.tabla.setCellWidget(row_index, 8, btn_doc)
+
+                btn_cobros = QPushButton("Cobros")
+                btn_cobros.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_cobros(vid))
+                self.tabla.setCellWidget(row_index, 9, btn_cobros)
+        finally:
+            self.tabla.setUpdatesEnabled(True)
+
 
     # ---------- acciones ----------
 
@@ -378,3 +386,52 @@ class FormVentas(QWidget):
     def _refrescar_al_cerrar(self, event):
         self.cargar_datos()
         event.accept()
+
+    def _load_after_paint(self):
+        """Se ejecuta en el próximo ciclo del event loop: la UI ya está pintada."""
+        self.setUpdatesEnabled(False)
+        try:
+            self.cargar_datos()
+        finally:
+            self.setUpdatesEnabled(True)
+            self._hide_loading()
+
+    def _show_loading(self, text="Cargando…"):
+        from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel
+        # Reusar si ya existe
+        if getattr(self, "_loading_overlay", None):
+            self._loading_overlay.show()
+            self._loading_label.setText(text)
+            self._position_loading()
+            return
+
+        self._loading_overlay = QFrame(self)
+        self._loading_overlay.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,220); border: 1px solid #ddd; border-radius: 8px; }"
+        )
+        self._loading_overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+        lay = QVBoxLayout(self._loading_overlay)
+        lay.setContentsMargins(20, 20, 20, 20)
+        lay.addStretch()
+        self._loading_label = QLabel(text, self._loading_overlay)
+        self._loading_label.setAlignment(Qt.AlignCenter)
+        self._loading_label.setStyleSheet("QLabel { font-size: 16px; color: #555; }")
+        lay.addWidget(self._loading_label)
+        lay.addStretch()
+
+        self._position_loading()
+        self._loading_overlay.show()
+
+    def _position_loading(self):
+        self._loading_overlay.setGeometry(self.rect())
+
+    def _hide_loading(self):
+        if getattr(self, "_loading_overlay", None):
+            self._loading_overlay.hide()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if getattr(self, "_loading_overlay", None):
+            self._position_loading()
+

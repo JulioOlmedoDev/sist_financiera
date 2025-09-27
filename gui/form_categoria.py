@@ -379,42 +379,49 @@ class FormCategoria(QDialog):
             self.reject() # Cerrar con reject en caso de error
 
     def eliminar_categoria(self):
-        """Elimina la categoría después de confirmación"""
+        """Elimina la categoría si no tiene productos asociados."""
         try:
             categoria = session.get(Categoria, self.categoria_id)
             if not categoria:
                 QMessageBox.warning(self, "Error", "Categoría no encontrada")
                 self.reject()
                 return
-            
-            # Verificar si tiene productos asociados
+
             productos_count = session.query(Producto).filter_by(categoria_id=self.categoria_id).count()
-            
-            mensaje = f"¿Estás seguro de eliminar la categoría '{categoria.nombre}'?"
             if productos_count > 0:
-                mensaje += f"\n\n⚠️ ATENCIÓN: Esta categoría tiene {productos_count} producto(s) asociado(s)."
-                mensaje += "\nAl eliminar la categoría también se eliminarán todos sus productos."
-            
+                print(f"DEBUG: Intento de eliminar categoría con {productos_count} producto(s)")
+                QMessageBox.information(
+                    self,
+                    "No se puede eliminar",
+                    f"Esta categoría tiene {productos_count} producto(s) asociado(s).\n"
+                    "Primero eliminá o reasigná esos productos."
+                )
+                return
+
             confirm = QMessageBox.question(
-                self, 
-                "Confirmar eliminación", 
-                mensaje,
+                self,
+                "Confirmar eliminación",
+                f"¿Estás seguro de eliminar la categoría '{categoria.nombre}'?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
-            
             if confirm == QMessageBox.Yes:
                 session.delete(categoria)
                 session.commit()
+                print("DEBUG: Categoría eliminada OK")
                 QMessageBox.information(self, "Éxito", "Categoría eliminada correctamente")
-                self.accept() # Cerrar con accept después de eliminar
+                self.accept()
             else:
-                self.reject() # Si no confirma, cerrar con reject
-                
+                print("DEBUG: Usuario canceló eliminación de categoría")
+                return
+
         except Exception as e:
             session.rollback()
+            print(f"DEBUG: Error inesperado al eliminar categoría: {e}")
             QMessageBox.critical(self, "Error", f"No se pudo eliminar la categoría:\n{str(e)}")
             self.reject()
+
+
 
     def limpiar_formulario(self):
         """Limpia los campos del formulario."""

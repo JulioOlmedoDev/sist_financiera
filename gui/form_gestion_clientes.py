@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QHBoxLayout, QHeaderView, QLineEdit
+    QPushButton, QHBoxLayout, QHeaderView, QLineEdit, QFrame
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from database import session
 from models import Cliente
 from gui.form_cliente import FormCliente
@@ -36,7 +36,9 @@ class FormGestionClientes(QWidget):
         self.tabla.setAlternatingRowColors(True)
         layout.addWidget(self.tabla)
 
-        self.cargar_datos()
+        # --- Carga diferida con overlay ---
+        self._show_loading("Cargando clientes…")
+        QTimer.singleShot(0, self._load_after_paint)
 
         # Estilo
         self.setStyleSheet("""
@@ -63,55 +65,126 @@ class FormGestionClientes(QWidget):
             }
         """)
 
+    # ---------- Carga diferida ----------
+    def _load_after_paint(self):
+        """Se ejecuta cuando la UI ya está pintada, así evitamos pantalla en blanco."""
+        self.setUpdatesEnabled(False)
+        try:
+            self.cargar_datos()
+        finally:
+            self.setUpdatesEnabled(True)
+            self._hide_loading()
+
+    def _show_loading(self, text="Cargando…"):
+        if getattr(self, "_loading_overlay", None):
+            self._loading_overlay.show()
+            self._loading_label.setText(text)
+            self._position_loading()
+            return
+
+        self._loading_overlay = QFrame(self)
+        self._loading_overlay.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,220); "
+            "border: 1px solid #ddd; border-radius: 8px; }"
+        )
+        # Si preferís bloquear clicks mientras carga, sacá la línea de abajo
+        self._loading_overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+        lay = QVBoxLayout(self._loading_overlay)
+        lay.setContentsMargins(20, 20, 20, 20)
+        lay.addStretch()
+        self._loading_label = QLabel(text, self._loading_overlay)
+        self._loading_label.setAlignment(Qt.AlignCenter)
+        self._loading_label.setStyleSheet("QLabel { font-size: 16px; color: #555; }")
+        lay.addWidget(self._loading_label)
+        lay.addStretch()
+
+        self._position_loading()
+        self._loading_overlay.show()
+
+    def _position_loading(self):
+        # Cubrí todo el widget
+        self._loading_overlay.setGeometry(self.rect())
+
+    def _hide_loading(self):
+        if getattr(self, "_loading_overlay", None):
+            self._loading_overlay.hide()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if getattr(self, "_loading_overlay", None):
+            self._position_loading()
+
+    # ---------- Datos ----------
     def cargar_datos(self):
         self.todos_los_clientes = session.query(Cliente).all()
         self.mostrar_clientes(self.todos_los_clientes)
 
     def mostrar_clientes(self, lista):
-        self.tabla.setRowCount(0)
-        for row_index, cliente in enumerate(lista):
-            self.tabla.insertRow(row_index)
-            self.tabla.setItem(row_index, 0, QTableWidgetItem(str(cliente.id)))
-            self.tabla.setItem(row_index, 1, QTableWidgetItem(cliente.apellidos))
-            self.tabla.setItem(row_index, 2, QTableWidgetItem(cliente.nombres))
-            self.tabla.setItem(row_index, 3, QTableWidgetItem(cliente.dni))
-            self.tabla.setItem(row_index, 4, QTableWidgetItem(cliente.calificacion if cliente.calificacion else ""))
+        # Pintado optimizado: sin parpadeos y más rápido
+        self.tabla.setUpdatesEnabled(False)
+        try:
+            if hasattr(self.tabla, "setSortingEnabled"):
+                self.tabla.setSortingEnabled(False)
+            self.tabla.clearContents()
+            self.tabla.setRowCount(len(lista))
 
+            for row_index, cliente in enumerate(lista):
+                self.tabla.setItem(row_index, 0, QTableWidgetItem(str(cliente.id)))
+                self.tabla.setItem(row_index, 1, QTableWidgetItem(cliente.apellidos or ""))
+                self.tabla.setItem(row_index, 2, QTableWidgetItem(cliente.nombres or ""))
+                self.tabla.setItem(row_index, 3, QTableWidgetItem(cliente.dni or ""))
+                self.tabla.setItem(row_index, 4, QTableWidgetItem(cliente.calificacion or ""))
 
-            # Botón de acción
-            btn_editar = QPushButton("Editar")
-            btn_editar.clicked.connect(self.generar_callback_editar(cliente.id))
+                # Botón de acción
+                btn_editar = QPushButton("Editar")
+                btn_editar.clicked.connect(self.generar_callback_editar(cliente.id))
 
-            acciones_layout = QHBoxLayout()
-            acciones_layout.setContentsMargins(0, 0, 0, 0)
-            acciones_layout.setSpacing(5)
-            acciones_layout.addWidget(btn_editar)
+                acciones_layout = QHBoxLayout()
+                acciones_layout.setContentsMargins(0, 0, 0, 0)
+                acciones_layout.setSpacing(5)
+                acciones_layout.addWidget(btn_editar)
 
-            acciones_widget = QWidget()
-            acciones_widget.setLayout(acciones_layout)
-            self.tabla.setCellWidget(row_index, 5, acciones_widget)
+                acciones_widget = QWidget()
+                acciones_widget.setLayout(acciones_layout)
+                self.tabla.setCellWidget(row_index, 5, acciones_widget)
+        finally:
+            if hasattr(self.tabla, "setSortingEnabled"):
+                self.tabla.setSortingEnabled(True)
+            self.tabla.setUpdatesEnabled(True)
 
+    # ---------- Acciones ----------
     def editar_cliente(self, cliente_id):
         self.form = FormCliente(cliente_id=cliente_id)
         self.form.setWindowModality(Qt.ApplicationModal)
         self.form.setAttribute(Qt.WA_DeleteOnClose)  # importante para limpiar memoria
         self.form.showMaximized()
-
-        # Conectamos el evento close del formulario a la recarga
+        # Al cerrar, refrescar listado
         self.form.closeEvent = self._refrescar_al_cerrar
 
     def generar_callback_editar(self, cliente_id):
         return lambda checked=False: self.editar_cliente(cliente_id)
 
+    # ---------- Filtro ----------
     def filtrar_clientes(self):
-        texto = self.buscador.text().lower()
-        filtrados = [c for c in self.todos_los_clientes if 
-                     texto in c.apellidos.lower() or 
-                     texto in c.nombres.lower() or 
-                     texto in c.dni.lower()]
+        # Si aún no cargó, no filtres
+        if not hasattr(self, "todos_los_clientes"):
+            return
+        texto = (self.buscador.text() or "").lower().strip()
+        if not texto:
+            self.mostrar_clientes(self.todos_los_clientes)
+            return
+
+        filtrados = [
+            c for c in self.todos_los_clientes
+            if (c.apellidos and texto in c.apellidos.lower()) or
+               (c.nombres and texto in c.nombres.lower()) or
+               (c.dni and texto in c.dni.lower())
+        ]
         self.mostrar_clientes(filtrados)
 
+    # ---------- Refresh ----------
     def _refrescar_al_cerrar(self, event):
-        self.cargar_datos()
+        self._show_loading("Actualizando…")
+        QTimer.singleShot(0, self._load_after_paint)
         event.accept()
-
