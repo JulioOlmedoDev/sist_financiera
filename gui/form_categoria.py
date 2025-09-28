@@ -188,7 +188,7 @@ class FormCategoria(QDialog):
                     background-color: #616161;
                 }
             """)
-            self.btn_cancelar.clicked.connect(self.reject) # Usar reject para QDialog
+            self.btn_cancelar.clicked.connect(self.reject)
             
             self.btn_guardar = QPushButton("✏️ Actualizar")
             self.btn_guardar.setStyleSheet("""
@@ -202,7 +202,7 @@ class FormCategoria(QDialog):
             """)
             self.btn_guardar.clicked.connect(self.guardar_categoria)
             for b in (self.btn_eliminar, self.btn_cancelar, self.btn_guardar):
-                b.setFixedSize(150, 44)   # ancho y alto iguales
+                b.setFixedSize(150, 44)
 
             self.btn_eliminar.setToolTip("Eliminar definitivamente la categoría")
             self.btn_cancelar.setToolTip("Cerrar sin guardar")
@@ -232,7 +232,7 @@ class FormCategoria(QDialog):
                     background-color: #616161;
                 }
             """)
-            self.btn_cancelar.clicked.connect(self.reject) # Usar reject para QDialog
+            self.btn_cancelar.clicked.connect(self.reject)
             
             self.btn_guardar = QPushButton("💾 Guardar")
             self.btn_guardar.setStyleSheet("""
@@ -276,10 +276,10 @@ class FormCategoria(QDialog):
                 self.nombre_input.setText(categoria.nombre)
             else:
                 QMessageBox.warning(self, "Error", "Categoría no encontrada")
-                self.reject() # Cerrar con reject si no se encuentra
+                self.reject() 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al cargar datos:\n{str(e)}")
-            self.reject() # Cerrar con reject en caso de error
+            self.reject()
 
     def guardar_categoria(self):
         """Guarda o actualiza la categoría y maneja el flujo post-guardado."""
@@ -325,7 +325,7 @@ class FormCategoria(QDialog):
                 categoria = Categoria(nombre=nombre)
                 session.add(categoria)
                 session.flush() # Obtener el ID antes del commit final
-                self.newly_created_category_id = categoria.id # Guardar el ID en la instancia
+                self.newly_created_category_id = categoria.id 
                 mensaje_exito = "Categoría creada correctamente"            
 
             session.commit()
@@ -376,7 +376,7 @@ class FormCategoria(QDialog):
         except Exception as e:
             session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar la categoría:\n{str(e)}")
-            self.reject() # Cerrar con reject en caso de error
+            self.reject() 
 
     def eliminar_categoria(self):
         """Elimina la categoría si no tiene productos asociados."""
@@ -437,6 +437,6 @@ class FormCategoria(QDialog):
         if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
             self.guardar_categoria()
         elif event.key() == Qt.Key_Escape:
-            self.reject() # Usar reject para QDialog
+            self.reject() 
         else:
             super().keyPressEvent(event)

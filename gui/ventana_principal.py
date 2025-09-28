@@ -604,7 +604,7 @@ class VentanaPrincipal(QMainWindow):
 
     # ---------- Listados y otros ----------
     def abrir_listado_productos(self):
-        from PySide6.QtWidgets import QApplication  # import local, o podés moverlo al encabezado del archivo
+        from PySide6.QtWidgets import QApplication  
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             self.mostrar_formulario(FormListadoProductos(), "Listado de Categorías y Productos")

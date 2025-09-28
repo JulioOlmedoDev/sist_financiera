@@ -66,10 +66,10 @@ class DialogCuotaMora(QDialog):
 
 # ---------------- Formulario principal de cobros (bloques fijos) ----------------
 class FormCobro(QWidget):
-    # Señales para refrescar listado/otras vistas (si las necesitás)
-    cobro_registrado = Signal(int)       # venta_id
-    cuotas_actualizadas = Signal(int)    # venta_id
-    venta_finalizada = Signal(int)       # venta_id
+    # Señales para refrescar listado/otras vistas
+    cobro_registrado = Signal(int)     
+    cuotas_actualizadas = Signal(int)  
+    venta_finalizada = Signal(int)      
 
     def __init__(self, venta_id=None, usuario_actual: Usuario | None = None):
         super().__init__()

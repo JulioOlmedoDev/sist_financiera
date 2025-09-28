@@ -198,7 +198,7 @@ class FormProducto(QDialog):  # ...
                     background-color: #616161;
                 }
             """)
-            self.btn_cancelar.clicked.connect(self.reject) # Usar reject para QDialog
+            self.btn_cancelar.clicked.connect(self.reject) 
             
             self.btn_guardar = QPushButton("✏️ Actualizar")
             self.btn_guardar.setStyleSheet("""
@@ -241,7 +241,7 @@ class FormProducto(QDialog):  # ...
                     background-color: #616161;
                 }
             """)
-            self.btn_cancelar.clicked.connect(self.reject) # Usar reject para QDialog
+            self.btn_cancelar.clicked.connect(self.reject) 
             
             self.btn_guardar = QPushButton("💾 Guardar")
             self.btn_guardar.setStyleSheet("""
@@ -404,6 +404,6 @@ class FormProducto(QDialog):  # ...
         if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
             self.guardar_producto()
         elif event.key() == Qt.Key_Escape:
-            self.reject() # Usar reject para QDialog
+            self.reject() 
         else:
             super().keyPressEvent(event)

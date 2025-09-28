@@ -87,7 +87,7 @@ class FormGestionClientes(QWidget):
             "QFrame { background: rgba(255,255,255,220); "
             "border: 1px solid #ddd; border-radius: 8px; }"
         )
-        # Si preferís bloquear clicks mientras carga, sacá la línea de abajo
+        # Si prefiero bloquear clicks mientras carga, sacar la línea de abajo
         self._loading_overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
         lay = QVBoxLayout(self._loading_overlay)
