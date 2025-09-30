@@ -374,7 +374,7 @@ class FormVenta(QWidget):
 
         self.venta_existente = venta
         es_finalizada = venta.finalizada
-        es_activa = not venta.anulada and not venta.finalizada
+        es_activa = (not venta.anulada) and (not venta.finalizada)
 
         # --- Datos base ---
         self.cliente_input.setText(f"{venta.cliente.apellidos}, {venta.cliente.nombres} (DNI {venta.cliente.dni})")
@@ -389,16 +389,55 @@ class FormVenta(QWidget):
             self.domicilio_combo, self.btn_nuevo_cliente, self.btn_refresh_cliente,
             self.btn_nuevo_garante, self.btn_refresh_garante, self.btn_calcular
         ]
-        if es_finalizada or not es_activa:
+
+        # 🔒 Bloqueo/permiso según estado
+        if es_finalizada:
+            # Finalizada: todo bloqueado (no se puede anular). Luego se agregan combos de calificación.
             for w in campos_bloqueados:
                 w.setDisabled(True)
+            if hasattr(self, 'chk_anulada'):
+                self.chk_anulada.setChecked(False)
+                self.chk_anulada.setDisabled(True)
+                self.motivo_anulacion.setText("")
+                self.motivo_anulacion.setDisabled(True)
+                self.motivo_anulacion_label.setDisabled(True)
+                self.motivo_anulacion.setVisible(False)
+                self.motivo_anulacion_label.setVisible(False)
 
-        if hasattr(self, 'chk_anulada'):
-            self.chk_anulada.setChecked(venta.anulada)
-            self.chk_anulada.setEnabled(es_activa)
-            self.motivo_anulacion.setText(venta.descripcion or "")
-            self.motivo_anulacion.setEnabled(es_activa)
-            self.motivo_anulacion_label.setEnabled(es_activa)
+        elif es_activa:
+            # Activa: desde Editar solo permitir ANULAR (check + motivo). Todo lo demás bloqueado.
+            for w in campos_bloqueados:
+                w.setDisabled(True)
+            if hasattr(self, 'chk_anulada'):
+                self.chk_anulada.setEnabled(True)
+                self.chk_anulada.setChecked(False)  # activa ⇒ por defecto no anulada
+                self.motivo_anulacion.setText(venta.descripcion or "")
+                # Motivo visible/habilitado solo si el check está tildado
+                mostrar = self.chk_anulada.isChecked()
+                self.motivo_anulacion.setVisible(mostrar)
+                self.motivo_anulacion_label.setVisible(mostrar)
+                self.motivo_anulacion.setEnabled(mostrar)
+                self.motivo_anulacion_label.setEnabled(mostrar)
+                # Reaccionar al toggle
+                self.chk_anulada.toggled.connect(lambda v: (
+                    self.motivo_anulacion.setVisible(v),
+                    self.motivo_anulacion_label.setVisible(v),
+                    self.motivo_anulacion.setEnabled(v),
+                    self.motivo_anulacion_label.setEnabled(v)
+                ))
+
+        else:
+            # Anulada: no editable (mostrar motivo como referencia)
+            for w in campos_bloqueados:
+                w.setDisabled(True)
+            if hasattr(self, 'chk_anulada'):
+                self.chk_anulada.setChecked(True)
+                self.chk_anulada.setDisabled(True)
+                self.motivo_anulacion.setText(venta.descripcion or "")
+                self.motivo_anulacion.setDisabled(True)
+                self.motivo_anulacion_label.setDisabled(True)
+                self.motivo_anulacion.setVisible(True)
+                self.motivo_anulacion_label.setVisible(True)
 
         for attr, combo in [('coordinador_id', self.coordinador_combo),
                             ('vendedor_id', self.vendedor_combo),
@@ -460,6 +499,11 @@ class FormVenta(QWidget):
                         self.calif_garante_combo.setCurrentIndex(idx2)
                 self.form.addRow(lbl_gar, self.calif_garante_combo)
 
+        # 🧩 Mover "Actualizar Venta" al final de forma SEGURA
+        if es_finalizada or es_activa:
+            self._mover_boton_guardar_al_final()
+
+
     # --- Cargas ---
     def cargar_clientes(self):
         self.clientes = session.query(Cliente).all()
@@ -507,6 +551,55 @@ class FormVenta(QWidget):
     # --- Guardar ---
     def guardar_venta(self):
         try:
+            # --- MODO EDICIÓN ---
+            if self.venta_id and self.venta_existente:
+                venta = self.venta_existente
+
+                # 1) Si la venta está FINALIZADA: solo se actualizan calificaciones.
+                if venta.finalizada:
+                    cambios = []
+                    if hasattr(self, 'calif_cliente_combo'):
+                        nueva = self.calif_cliente_combo.currentText()
+                        if venta.cliente and venta.cliente.calificacion != nueva:
+                            venta.cliente.calificacion = nueva
+                            cambios.append("calificación del cliente")
+                    if venta.garante and hasattr(self, 'calif_garante_combo'):
+                        nueva = self.calif_garante_combo.currentText()
+                        if venta.garante.calificacion != nueva:
+                            venta.garante.calificacion = nueva
+                            cambios.append("calificación del garante")
+
+                    if cambios:
+                        session.commit()
+                        QMessageBox.information(self, "Actualizado", "Se actualizaron: " + ", ".join(cambios) + ".")
+                    else:
+                        QMessageBox.information(self, "Sin cambios", "No se detectaron cambios de calificación.")
+                    self.close()
+                    return
+
+                # 2) Si la venta está ACTIVA: desde Editar sólo se permite ANULAR.
+                if not venta.anulada:  # venta activa
+                    if hasattr(self, 'chk_anulada') and self.chk_anulada.isChecked():
+                        venta.anulada = True
+                        venta.descripcion = (self.motivo_anulacion.toPlainText() or "").strip() or None
+                        session.commit()
+                        QMessageBox.information(self, "Venta anulada", "La venta fue anulada correctamente.")
+                        self.close()
+                        return
+                    else:
+                        QMessageBox.warning(
+                            self, "Edición limitada",
+                            "Desde esta pantalla solo podés ANULAR ventas activas. "
+                            "Si necesitás modificar importes, cuotas, etc., usá los módulos correspondientes."
+                        )
+                        return
+
+                # 3) Si llegó aquí es porque la venta ya estaba anulada (no editable).
+                QMessageBox.warning(self, "Restringido", "No se pueden modificar ventas anuladas.")
+                return
+
+            # --- MODO CREACIÓN (nueva venta) ---
+            # A partir de acá se aplican las validaciones completas y el requisito de PTF.
             texto = self.cliente_input.text()
             cliente = next((c for c in self.clientes
                             if f"{c.apellidos}, {c.nombres} (DNI {c.dni})" == texto), None)
@@ -519,8 +612,8 @@ class FormVenta(QWidget):
                 QMessageBox.warning(self, "Dato requerido", "Seleccioná un plan de pago."); return
 
             if self.coordinador_combo.currentData() is None or \
-               self.vendedor_combo.currentData() is None or \
-               self.cobrador_combo.currentData() is None:
+            self.vendedor_combo.currentData() is None or \
+            self.cobrador_combo.currentData() is None:
                 QMessageBox.warning(self, "Dato requerido", "Seleccioná coordinador, vendedor y cobrador."); return
 
             if self.monto_input.value() <= 0:
@@ -542,30 +635,8 @@ class FormVenta(QWidget):
             garante = next((g for g in self.garantes
                             if f"{g.apellidos}, {g.nombres} (DNI {g.dni})" == texto2), None)
 
-            # Confirmación previa (ventana detalle en castellano)
+            # Confirmación previa (ventana detalle)
             if not self._mostrar_confirmacion_guardado(texto, texto2):
-                return
-
-            # Actualización vs creación
-            if self.venta_id and self.venta_existente:
-                venta = self.venta_existente
-                if venta.finalizada:
-                    if hasattr(self, 'calif_cliente_combo'):
-                        venta.cliente.calificacion = self.calif_cliente_combo.currentText()
-                    if venta.garante and hasattr(self, 'calif_garante_combo'):
-                        venta.garante.calificacion = self.calif_garante_combo.currentText()
-                    session.commit()
-                    QMessageBox.information(self, "Actualizado", "Calificaciones actualizadas.")
-                    self.close(); return
-
-                if not venta.anulada:
-                    venta.anulada = self.chk_anulada.isChecked()
-                    venta.descripcion = self.motivo_anulacion.toPlainText() if venta.anulada else None
-                    session.commit()
-                    QMessageBox.information(self, "Actualizado", "Venta actualizada correctamente.")
-                    self.close(); return
-
-                QMessageBox.warning(self, "Restringido", "No se pueden modificar ventas anuladas.")
                 return
 
             # Crear nueva venta
@@ -594,19 +665,21 @@ class FormVenta(QWidget):
             )
             session.add(venta); session.commit()
 
-            # Generar cuotas
+            # Generar cuotas…
             freq = venta.plan_pago
             inicio = venta.fecha_inicio_pago or venta.fecha
             for i in range(venta.num_cuotas):
                 if freq == "mensual": fv = inicio + relativedelta(months=i)
                 elif freq == "semanal": fv = inicio + relativedelta(weeks=i)
                 else: fv = inicio + relativedelta(days=i)
-                cuota = Cuota(venta_id=venta.id, numero=i + 1, fecha_vencimiento=fv,
-                              monto_original=venta.valor_cuota, monto_pagado=0.0, pagada=False)
+                cuota = Cuota(
+                    venta_id=venta.id, numero=i + 1, fecha_vencimiento=fv,
+                    monto_original=venta.valor_cuota, monto_pagado=0.0, pagada=False
+                )
                 session.add(cuota)
             session.commit()
 
-            # Pregunta “Sí / No” sobre documentos
+            # Diálogo de docs (igual que antes)...
             msg = QMessageBox(self)
             msg.setIcon(QMessageBox.Question)
             msg.setWindowTitle("Venta registrada")
@@ -622,45 +695,68 @@ class FormVenta(QWidget):
                 dlg.setWindowTitle("Seleccionar formato")
                 dlg.setMinimumWidth(300)
                 layout = QHBoxLayout(dlg)
-
                 btn_word = QPushButton("Word")
                 btn_excel = QPushButton("Excel")
-                layout.addWidget(btn_word)
-                layout.addWidget(btn_excel)
-
+                layout.addWidget(btn_word); layout.addWidget(btn_excel)
                 btn_cancel = QDialogButtonBox(QDialogButtonBox.Close)
                 btn_cancel.rejected.connect(dlg.reject)
                 layout.addWidget(btn_cancel)
 
                 def open_file(path):
-                    if os.name == 'nt':
-                        os.startfile(path)
-                    else:
-                        os.system(f"xdg-open '{path}'")
+                    if os.name == 'nt': os.startfile(path)
+                    else: os.system(f"xdg-open '{path}'")
 
                 def on_word():
                     path_c = generar_contrato_word(venta, "plantillas/plantilla_contrato_mutuo.docx")
                     path_p = generar_pagare_word(venta, "plantillas/plantilla_pagare_con_garante.docx")
                     for p in (path_c, path_p):
-                        if os.path.exists(p):
-                            open_file(p)
+                        if os.path.exists(p): open_file(p)
                     dlg.accept()
 
                 def on_excel():
                     path_c = generar_contrato_excel(venta)
                     path_p = generar_pagare_excel(venta)
                     for p in (path_c, path_p):
-                        if os.path.exists(p):
-                            open_file(p)
+                        if os.path.exists(p): open_file(p)
                     dlg.accept()
 
                 btn_word.clicked.connect(on_word)
                 btn_excel.clicked.connect(on_excel)
                 dlg.exec()
 
-            # cerrar y emitir
             self.close(); self.sale_saved.emit()
 
         except Exception as e:
             session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar la venta:\n{e}")
+
+    def _mover_boton_guardar_al_final(self):
+        # Mueve el botón al final del QFormLayout sin que Qt lo destruya
+        from PySide6.QtWidgets import QFormLayout
+        fila_boton = None
+        for i in range(self.form.rowCount()):
+            item_field = self.form.itemAt(i, QFormLayout.FieldRole)
+            if item_field and item_field.widget() is self.btn_guardar:
+                fila_boton = i
+                break
+        if fila_boton is None:
+            return
+
+        # Reparentar para que no sea destruido al remover la fila
+        self.btn_guardar.setParent(self)
+
+        # Quitar widgets de la fila (si existen) y luego la fila
+        item_label = self.form.itemAt(fila_boton, QFormLayout.LabelRole)
+        if item_label and item_label.widget():
+            self.form.removeWidget(item_label.widget())
+        item_field = self.form.itemAt(fila_boton, QFormLayout.FieldRole)
+        if item_field and item_field.widget():
+            self.form.removeWidget(item_field.widget())
+
+        self.form.removeRow(fila_boton)
+
+        # Volver a insertarlo al final
+        self.form.addRow("", self.btn_guardar)
+
+
+
