@@ -1,7 +1,8 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, Text, ForeignKey, Enum, Boolean, Float
+from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Text, ForeignKey, Enum, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from dotenv import load_dotenv
+from datetime import datetime
 
 import os
 
@@ -47,7 +48,15 @@ class Usuario(Base):
     password = Column(String(255), nullable=False)
     rol_id = Column(Integer, ForeignKey('roles.id'))
     personal_id = Column(Integer, ForeignKey('personal.id'))
-    activo = Column(Boolean, default=True)  # ✅ NUEVO
+    activo = Column(Boolean, default=True)
+
+    # ✅ NUEVOS (para seguridad)
+    last_password_change = Column(DateTime, nullable=True)
+    must_change_password = Column(Boolean, default=False, nullable=False)
+    failed_attempts = Column(Integer, default=0, nullable=False)
+    lock_until = Column(DateTime, nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
+    previous_login_at = Column(DateTime, nullable=True)
 
     rol = relationship("Rol")
     permisos = relationship("Permiso", secondary="usuario_permisos")

@@ -5,6 +5,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import QTimer, QEvent
+from PySide6.QtWidgets import QApplication
 
 from gui.form_cliente import FormCliente
 from gui.form_venta import FormVenta
@@ -24,6 +26,8 @@ from gui.dialog_tasas import DialogTasas
 from gui.form_listado_productos import FormListadoProductos
 from gui.form_gestion_personal import FormGestionPersonal
 from gui.form_listado_usuarios import FormListadoUsuarios
+from gui.change_password_dialog import ChangePasswordDialog
+from zoneinfo import ZoneInfo
 
 
 class BotonNavegacion(QPushButton):
@@ -77,7 +81,6 @@ class VentanaPrincipal(QMainWindow):
         super().__init__()
         if not usuario:
             QMessageBox.critical(self, "Sesión requerida", "Debés iniciar sesión para usar el sistema.")
-            from PySide6.QtWidgets import QApplication
             QApplication.quit()
             return
         self.usuario = usuario  # Usuario logueado
@@ -108,6 +111,19 @@ class VentanaPrincipal(QMainWindow):
 
         # Bienvenida
         self.mostrar_bienvenida()
+
+        # ---- Auto-logout por inactividad (mover acá) ----
+        self._idle_minutes = 0.30
+        self._idle_ms = int(self._idle_minutes * 60 * 1000)
+        self._idle_timer = QTimer(self)
+        self._idle_prompt_open = False
+        self._idle_timer.setSingleShot(True)  # single-shot y lo rearmamos en cada interacción
+        self._idle_timer.timeout.connect(self._on_idle_timeout)
+        self._idle_timer.start(self._idle_ms)
+
+        # filtro global (toda la app), no solo la ventana
+        QApplication.instance().installEventFilter(self)
+
 
     # ---------- Estilos ----------
     def aplicar_estilo(self):
@@ -432,6 +448,14 @@ class VentanaPrincipal(QMainWindow):
         self.titulo_pagina = QLabel("Inicio")
         self.titulo_pagina.setObjectName("titulo")
         header_layout.addWidget(self.titulo_pagina)
+        # Espaciador para empujar el botón a la derecha
+        header_layout.addStretch()
+
+        # Botón Cambiar contraseña
+        self.btn_cambiar_pass = QPushButton("Cambiar contraseña")
+        self.btn_cambiar_pass.setFixedHeight(32)
+        self.btn_cambiar_pass.clicked.connect(self.abrir_cambiar_contrasena)
+        header_layout.addWidget(self.btn_cambiar_pass)
 
         self.content_layout.addWidget(self.header)
 
@@ -475,6 +499,23 @@ class VentanaPrincipal(QMainWindow):
         usuario_label.setObjectName("subtitulo")
         usuario_label.setAlignment(Qt.AlignCenter)
         welcome_layout.addWidget(usuario_label)
+        # Mostrar último acceso ANTERIOR (no el actual)
+        ultimo = "—"
+        try:
+            dt_prev = getattr(self.usuario, "previous_login_at", None)
+            if dt_prev:
+                if dt_prev.tzinfo is None:  # guardado en UTC naive
+                    dt_prev = dt_prev.replace(tzinfo=ZoneInfo("UTC"))
+                dt_local = dt_prev.astimezone(ZoneInfo("America/Argentina/Cordoba"))
+                ultimo = dt_local.strftime('%d/%m/%Y %H:%M')
+            else:
+                ultimo = "Primera vez"
+        except Exception:
+            pass
+
+        ultimo_login_label = QLabel(f"Último acceso: {ultimo}")
+        ultimo_login_label.setAlignment(Qt.AlignCenter)
+        welcome_layout.addWidget(ultimo_login_label)
 
         from datetime import datetime
         fecha_label = QLabel(f"Fecha: {datetime.now().strftime('%d/%m/%Y')}")
@@ -602,6 +643,10 @@ class VentanaPrincipal(QMainWindow):
         if dlg.exec() == QDialog.Accepted:
             QMessageBox.information(self, "Tasas", "Tasas actualizadas correctamente.")
 
+    def abrir_cambiar_contrasena(self):
+        dlg = ChangePasswordDialog(self, self.usuario)
+        dlg.exec()
+
     # ---------- Listados y otros ----------
     def abrir_listado_productos(self):
         from PySide6.QtWidgets import QApplication  
@@ -621,3 +666,48 @@ class VentanaPrincipal(QMainWindow):
     def mostrar_formulario_inicio(self):
         # Marca Inicio activo en menú y vuelve a bienvenida
         self.mostrar_bienvenida()
+
+    def _reset_idle_timer(self):
+        t = getattr(self, "_idle_timer", None)
+        # No rearmar mientras el diálogo de inactividad está abierto
+        if t and not getattr(self, "_idle_prompt_open", False):
+            t.start(self._idle_ms)
+
+    def eventFilter(self, obj, event):
+        # Si hay diálogo abierto, no rearmes el timer con eventos de usuario
+        if getattr(self, "_idle_prompt_open", False):
+            return super().eventFilter(obj, event)
+
+        if event.type() in (
+            QEvent.MouseMove, QEvent.MouseButtonPress, QEvent.MouseButtonRelease,
+            QEvent.KeyPress, QEvent.KeyRelease, QEvent.Wheel,
+            QEvent.TouchBegin, QEvent.TouchUpdate, QEvent.TouchEnd,
+            QEvent.FocusIn, QEvent.WindowActivate
+        ):
+            self._reset_idle_timer()
+        return super().eventFilter(obj, event)
+
+    def _on_idle_timeout(self):
+        # Evitar abrir múltiples diálogos
+        if getattr(self, "_idle_prompt_open", False):
+            return
+        self._idle_prompt_open = True
+        try:
+            # Detener el timer mientras mostramos el diálogo
+            t = getattr(self, "_idle_timer", None)
+            if t:
+                t.stop()
+
+            resp = QMessageBox.question(
+                self,
+                "Sesión inactiva",
+                f"Pasaron más de {self._idle_minutes} minutos sin actividad.\n¿Querés continuar la sesión?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if resp == QMessageBox.Yes:
+                self._reset_idle_timer()  # única rearmada
+            else:
+                QApplication.quit()
+        finally:
+            self._idle_prompt_open = False
