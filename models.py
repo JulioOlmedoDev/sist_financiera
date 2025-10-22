@@ -57,6 +57,10 @@ class Usuario(Base):
     lock_until = Column(DateTime, nullable=True)
     last_login_at = Column(DateTime, nullable=True)
     previous_login_at = Column(DateTime, nullable=True)
+    # 2FA (TOTP)
+    totp_secret = Column(String(64), nullable=True)
+    totp_enabled = Column(Boolean, default=False, nullable=False)
+    require_2fa = Column(Boolean, default=False, nullable=False)  # exigir 2FA a este usuario
 
     rol = relationship("Rol")
     permisos = relationship("Permiso", secondary="usuario_permisos")
@@ -228,6 +232,31 @@ class Tasa(Base):
     tem  = Column(Float, nullable=False)
     tna  = Column(Float, nullable=False)
     tea  = Column(Float, nullable=False)
+
+# --- Ajustes del sistema (clave-valor) ---
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), unique=True, nullable=False)
+    value = Column(String(255), nullable=True)
+
+# Helpers simples para leer/escribir ajustes (¡fuera de la clase!)
+def get_setting(db_session, key: str, default: str | None = None) -> str | None:
+    try:
+        s = db_session.query(SystemSetting).filter_by(key=key).first()
+        return s.value if s else default
+    except Exception:
+        return default
+
+def set_setting(db_session, key: str, value: str | None) -> None:
+    s = db_session.query(SystemSetting).filter_by(key=key).first()
+    if not s:
+        s = SystemSetting(key=key, value=value)
+        db_session.add(s)
+    else:
+        s.value = value
+    db_session.commit()
+
 
 # Crear todas las tablas
 if __name__ == "__main__":

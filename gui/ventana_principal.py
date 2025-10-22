@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import (
     QMainWindow, QLabel, QWidget, QVBoxLayout, 
     QHBoxLayout, QPushButton, QFrame, QScrollArea, QSizePolicy,
-    QStackedWidget, QMessageBox, QDialog
+    QStackedWidget, QMessageBox, QDialog, QMenu, QToolButton
 )
-from PySide6.QtGui import QPixmap, QIcon
+from PySide6.QtGui import QPixmap, QIcon, QKeySequence, QShortcut
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtCore import QTimer, QEvent
 from PySide6.QtWidgets import QApplication
@@ -26,7 +26,10 @@ from gui.dialog_tasas import DialogTasas
 from gui.form_listado_productos import FormListadoProductos
 from gui.form_gestion_personal import FormGestionPersonal
 from gui.form_listado_usuarios import FormListadoUsuarios
+from gui.form_mi_perfil import FormMiPerfil
 from gui.change_password_dialog import ChangePasswordDialog
+from gui.recovery_dialog import RecoveryDialog
+from gui.lock_screen import LockScreenDialog
 from zoneinfo import ZoneInfo
 
 
@@ -112,8 +115,11 @@ class VentanaPrincipal(QMainWindow):
         # Bienvenida
         self.mostrar_bienvenida()
 
+        self._sc_lock = QShortcut(QKeySequence("Ctrl+L"), self)
+        self._sc_lock.activated.connect(self.bloquear_pantalla)
+
         # ---- Auto-logout por inactividad (mover acá) ----
-        self._idle_minutes = 0.30
+        self._idle_minutes = 10
         self._idle_ms = int(self._idle_minutes * 60 * 1000)
         self._idle_timer = QTimer(self)
         self._idle_prompt_open = False
@@ -124,25 +130,77 @@ class VentanaPrincipal(QMainWindow):
         # filtro global (toda la app), no solo la ventana
         QApplication.instance().installEventFilter(self)
 
+        # Atajo Ctrl+L para bloquear pantalla
+        self._lock_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
+        self._lock_shortcut.activated.connect(self.bloquear_pantalla)
+
+    def _circle_avatar(self, path: str, size: int = 24) -> QIcon:
+        pm = QPixmap(path)
+        if pm.isNull():
+            pm = QPixmap(size, size)
+            pm.fill(Qt.lightGray)
+        pm = pm.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+
+        from PySide6.QtGui import QPainter, QPainterPath
+        circ = QPixmap(size, size); circ.fill(Qt.transparent)
+        p = QPainter(circ); p.setRenderHint(QPainter.Antialiasing, True)
+        path_circle = QPainterPath(); path_circle.addEllipse(0, 0, size, size)
+        p.setClipPath(path_circle); p.drawPixmap(0, 0, pm); p.end()
+        return QIcon(circ)
 
     # ---------- Estilos ----------
     def aplicar_estilo(self):
-        self.setStyleSheet("""
+        base = """
             QMainWindow { background-color: #f5f5f5; }
             QLabel { color: #424242; font-size: 14px; }
             QLabel#titulo { color: #7b1fa2; font-size: 24px; font-weight: bold; }
             QLabel#subtitulo { color: #9c27b0; font-size: 18px; font-weight: bold; }
             QLabel#bienvenida { color: #7b1fa2; font-size: 32px; font-weight: bold; }
+
             QPushButton {
                 background-color: #9c27b0; color: white; border: none; border-radius: 4px;
                 padding: 8px 16px; font-weight: bold;
             }
             QPushButton:hover { background-color: #7b1fa2; }
             QPushButton:pressed { background-color: #6a1b9a; }
+
             QFrame#sidebar { background-color: #4a148c; border-right: 1px solid #3e1178; }
             QFrame#header { background-color: white; border-bottom: 1px solid #e0e0e0; }
             QFrame#content { background-color: white; border-radius: 8px; border: 1px solid #e0e0e0; }
-        """)
+        """
+
+        # Estilo del botón de perfil (QToolButton en forma de "pill") y del QMenu
+        perfil = """
+            QToolButton {
+                padding: 6px 12px;
+                border: 1px solid #e3e3e3;
+                border-radius: 18px;         /* pill */
+                background: #ffffff;
+                color: #424242;
+                font-weight: 600;
+            }
+            QToolButton:hover { background: #f7f7f7; }
+            QToolButton:pressed { background: #f0f0f0; }
+
+            QMenu {
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 6px;
+            }
+            QMenu::item {
+                padding: 6px 12px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected { background: #f4eef8; } /* lavanda suave */
+            QMenu::separator {
+                height: 1px;
+                background: #eeeeee;
+                margin: 6px 8px;
+            }
+        """
+
+        self.setStyleSheet(base + perfil)
 
     # ---------- Sidebar ----------
     def crear_sidebar(self):
@@ -357,6 +415,10 @@ class VentanaPrincipal(QMainWindow):
             self.abrir_listado_productos()
 
         elif modulo == "personal":
+            btn_mi_perfil = BotonNavegacion("  Mi perfil", "static/icons/user-circle.png")
+            btn_mi_perfil.clicked.connect(self._on_click(self._set_active_sub_btn, btn_mi_perfil, self.abrir_mi_perfil))
+            self.menu_layout.addWidget(btn_mi_perfil)
+
             if tiene_permiso(self.usuario, "cargar_personal"):
                 btn_personal = BotonNavegacion("  Personal", "static/icons/user-plus.png")
                 btn_personal.clicked.connect(self._on_click(self._set_active_sub_btn, btn_personal, self.abrir_form_personal))
@@ -374,6 +436,10 @@ class VentanaPrincipal(QMainWindow):
                 btn_listado_usuarios = BotonNavegacion("  Listado de Usuarios", "static/icons/list.png")
                 btn_listado_usuarios.clicked.connect(self._on_click(self._set_active_sub_btn, btn_listado_usuarios, self.abrir_listado_usuarios))
                 self.menu_layout.addWidget(btn_listado_usuarios)
+
+                btn_recovery = BotonNavegacion("  Recuperar acceso", "static/icons/shield.png")
+                btn_recovery.clicked.connect(self._on_click(self._set_active_sub_btn, btn_recovery, self.abrir_recuperar_acceso))
+                self.menu_layout.addWidget(btn_recovery)
 
             if tiene_permiso(self.usuario, "asignar_permisos"):
                 btn_permisos = BotonNavegacion("  Permisos", "static/icons/shield.png")
@@ -448,14 +514,47 @@ class VentanaPrincipal(QMainWindow):
         self.titulo_pagina = QLabel("Inicio")
         self.titulo_pagina.setObjectName("titulo")
         header_layout.addWidget(self.titulo_pagina)
-        # Espaciador para empujar el botón a la derecha
+
+        # Espaciador para empujar los botones a la derecha
         header_layout.addStretch()
 
-        # Botón Cambiar contraseña
-        self.btn_cambiar_pass = QPushButton("Cambiar contraseña")
-        self.btn_cambiar_pass.setFixedHeight(32)
-        self.btn_cambiar_pass.clicked.connect(self.abrir_cambiar_contrasena)
-        header_layout.addWidget(self.btn_cambiar_pass)
+        # --- Botón Bloquear pantalla ---
+        self.btn_bloquear = QPushButton("Bloquear pantalla")
+        self.btn_bloquear.setFixedHeight(32)
+        self.btn_bloquear.setToolTip("Bloquear pantalla (Ctrl+L)")
+        self.btn_bloquear.clicked.connect(self.bloquear_pantalla)
+        header_layout.addWidget(self.btn_bloquear)
+
+        # --- Badge de Usuario con menú (avatar + nombre) ---
+        self.btn_user = QToolButton(self.header)
+        self.btn_user.setPopupMode(QToolButton.InstantPopup)
+        self.btn_user.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.btn_user.setAutoRaise(True)  # look minimalista
+        self.btn_user.setFixedHeight(36)
+        self.btn_user.setCursor(Qt.PointingHandCursor)
+        self.btn_user.setStyleSheet("""
+            QToolButton {
+                padding: 6px 12px;
+                border: 1px solid #e3e3e3;
+                border-radius: 18px;
+                background: #ffffff;
+                color: #424242;
+                font-weight: 600;
+            }
+            QToolButton:hover { background: #f7f7f7; }
+            QToolButton:pressed { background: #f0f0f0; }
+        """)
+
+        self._refresh_user_badge()          # texto + icono
+        self.btn_user.setMenu(self._build_profile_menu())  # menú inicial
+        header_layout.addWidget(self.btn_user)
+
+
+        # --- Botón Cambiar contraseña ---
+        #self.btn_cambiar_pass = QPushButton("Cambiar contraseña")
+        #self.btn_cambiar_pass.setFixedHeight(32)
+        #self.btn_cambiar_pass.clicked.connect(self.abrir_cambiar_contrasena)
+        #header_layout.addWidget(self.btn_cambiar_pass)
 
         self.content_layout.addWidget(self.header)
 
@@ -588,7 +687,6 @@ class VentanaPrincipal(QMainWindow):
         # Tras cerrar, refrescar el listado del panel central
         self.abrir_listado_productos()
 
-
     def abrir_form_personal(self):
         self.mostrar_formulario(FormPersonal(), "Gestión de Personal")
 
@@ -609,7 +707,6 @@ class VentanaPrincipal(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-
     def abrir_gestion_garantes(self):
         self.mostrar_formulario(FormGestionGarantes(), "Gestión de Garantes")
 
@@ -621,12 +718,15 @@ class VentanaPrincipal(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-
     def abrir_form_cobros(self):
         self.form_cobros = FormCobro(usuario_actual=self.usuario) 
         self.form_cobros.setWindowModality(Qt.ApplicationModal)
         self.form_cobros.setAttribute(Qt.WA_DeleteOnClose)
         self.form_cobros.showMaximized()
+
+    def abrir_mi_perfil(self):
+        self.mostrar_formulario(FormMiPerfil(self.usuario), "Mi perfil")
+
 
     # ---------- Diálogos y sesión ----------
     def cerrar_sesion(self):
@@ -661,6 +761,10 @@ class VentanaPrincipal(QMainWindow):
 
     def abrir_listado_usuarios(self):
         self.mostrar_formulario(FormListadoUsuarios(), "Listado de Usuarios")
+
+    def abrir_recuperar_acceso(self):
+        dlg = RecoveryDialog(self, self.usuario)
+        dlg.exec()
 
     # ---------- Inicio ----------
     def mostrar_formulario_inicio(self):
@@ -711,3 +815,96 @@ class VentanaPrincipal(QMainWindow):
                 QApplication.quit()
         finally:
             self._idle_prompt_open = False
+
+    def bloquear_pantalla(self):
+        # Pausar temporizador de inactividad mientras está bloqueado
+        try:
+            if hasattr(self, "_idle_timer"):
+                self._idle_timer.stop()
+            # Evitar que quede un prompt de inactividad pendiente
+            if hasattr(self, "_idle_prompt_open"):
+                self._idle_prompt_open = False
+
+            dlg = LockScreenDialog(self, self.usuario)
+            dlg.exec()  # modal; vuelve cuando desbloquea o cierra sesión
+        finally:
+            # Si no cerró la app, rearmar el timer
+            if hasattr(self, "_idle_timer"):
+                self._idle_timer.start(self._idle_ms)
+
+    def abrir_configurar_2fa(self):
+        from gui.two_factor_setup import TwoFactorSetupDialog
+        dlg = TwoFactorSetupDialog(self, self.usuario)
+        if dlg.exec() == QDialog.Accepted:
+            # al activarse 2FA, actualizamos menú y badge
+            self.btn_user.setMenu(self._build_profile_menu())
+            self._refresh_user_badge()
+
+    def _build_profile_menu(self) -> QMenu:
+        """Arma el menú del badge de usuario según el estado (2FA on/off)."""
+        menu = QMenu(self)
+
+        act_mi_perfil = menu.addAction("Mi perfil")
+        act_mi_perfil.triggered.connect(self.abrir_mi_perfil)
+
+        act_cambiar = menu.addAction("Cambiar contraseña…")
+        act_cambiar.triggered.connect(self.abrir_cambiar_contrasena)
+
+        # Alterna según 2FA
+        if getattr(self.usuario, "totp_enabled", False):
+            act_2fa = menu.addAction("Desactivar ingreso con token")
+            act_2fa.triggered.connect(self.desactivar_2fa)
+        else:
+            act_2fa = menu.addAction("Activar ingreso con token")
+            act_2fa.triggered.connect(self.abrir_configurar_2fa)
+
+        menu.addSeparator()
+        act_lock = menu.addAction("Bloquear pantalla")
+        act_lock.triggered.connect(self.bloquear_pantalla)
+
+        act_logout = menu.addAction("Cerrar sesión")
+        act_logout.triggered.connect(self.cerrar_sesion)
+
+        return menu
+    
+    def _display_user_text(self) -> str:
+        """Devuelve 'APELLIDO, Nombre' si hay datos en Personal; si no, cae al nombre de usuario."""
+        per = getattr(self.usuario, "personal", None)
+        if per and getattr(per, "apellidos", None) and getattr(per, "nombres", None):
+            apellido = (per.apellidos or "").upper()
+            nombre = " ".join(p.capitalize() for p in (per.nombres or "").split())
+            return f"{apellido}, {nombre}"
+        return f"{self.usuario.nombre}"
+
+    def _refresh_user_badge(self) -> None:
+        """Actualiza texto e icono del QToolButton de usuario."""
+        # icono (usa fallback si falta)
+        icon_path = "static/icon.png"
+        if not QPixmap(icon_path).isNull():
+            self.btn_user.setIcon(self._circle_avatar(icon_path, 22))
+            self.btn_user.setIconSize(QSize(22, 22))
+
+        # texto estilizado + triangulito
+        self.btn_user.setText(self._display_user_text() + "  ▾")
+        self.btn_user.setToolTip("Mi perfil y seguridad")
+
+    def desactivar_2fa(self):
+        """Apaga el 2FA del usuario actual desde el menú de perfil."""
+        from PySide6.QtWidgets import QMessageBox
+        from database import session
+        ok = QMessageBox.question(
+            self, "Desactivar ingreso con token",
+            "¿Seguro que querés desactivar el ingreso con token (2FA) para tu cuenta?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if ok != QMessageBox.Yes:
+            return
+        try:
+            self.usuario.totp_enabled = False
+            self.usuario.totp_secret = None
+            session.commit()
+            QMessageBox.information(self, "Listo", "Se desactivó el ingreso con token.")
+            self.btn_user.setMenu(self._build_profile_menu())
+            self._refresh_user_badge()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo desactivar: {e}")

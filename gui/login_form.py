@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QMessageBox, QHBoxLayout, QSpacerItem, QSizePolicy, QDialog, QFormLayout
+    QVBoxLayout, QMessageBox, QHBoxLayout, QSpacerItem, QSizePolicy, QDialog, QFormLayout, QInputDialog
 )
 from PySide6.QtGui import QPixmap, QFont
 from PySide6.QtCore import Qt
@@ -9,6 +9,10 @@ from models import Usuario
 import hashlib
 import os
 from datetime import datetime, timedelta
+import pyotp
+from gui.two_factor_setup import TwoFactorSetupDialog
+from models import get_setting
+
 
 # === Seguridad: Argon2id ===
 from passlib.hash import argon2
@@ -82,6 +86,27 @@ class ChangePasswordDialog(QDialog):
         session.commit()
         QMessageBox.information(self, "Listo", "Contraseña actualizada.")
         self.accept()
+
+class TokenDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Código de verificación")
+        lay = QFormLayout(self)
+        self.code = QLineEdit()
+        self.code.setMaxLength(6)
+        self.code.setPlaceholderText("Código de 6 dígitos")
+        self.code.setEchoMode(QLineEdit.Normal)
+        lay.addRow("Token:", self.code)
+        btns = QHBoxLayout()
+        btn_ok = QPushButton("Verificar")
+        btn_cancel = QPushButton("Cancelar")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel.clicked.connect(self.reject)
+        btns.addStretch(); btns.addWidget(btn_cancel); btns.addWidget(btn_ok)
+        lay.addRow(btns)
+
+    def get_code(self) -> str:
+        return (self.code.text() or "").strip()
 
 
 class LoginForm(QWidget):
@@ -165,13 +190,9 @@ class LoginForm(QWidget):
                 QMessageBox.critical(self, "Error", "Usuario o contraseña incorrectos.")
             return
 
-        # Login correcto: resetear contadores
+        # Login correcto: resetear contadores (AÚN sin commit)
         usuario.failed_attempts = 0
         usuario.lock_until = None
-
-        # Registrar acceso anterior y el actual
-        usuario.previous_login_at = usuario.last_login_at
-        usuario.last_login_at = now
 
         # Si venía con sha256 legacy, rehash a Argon2 automáticamente
         if legacy:
@@ -179,7 +200,28 @@ class LoginForm(QWidget):
             if not usuario.last_password_change:
                 usuario.last_password_change = now
 
-        session.commit()
+        # --- Segundo factor (si está habilitado) ---
+        if getattr(usuario, "totp_enabled", False) and getattr(usuario, "totp_secret", None):
+            from PySide6.QtWidgets import QInputDialog, QLineEdit
+            import pyotp
+
+            code, ok = QInputDialog.getText(
+                self,
+                "Código 2FA",
+                "Ingresá el código de 6 dígitos:",
+                QLineEdit.Normal
+            )
+            if not ok:
+                QMessageBox.information(self, "Acción requerida", "Ingresá el código 2FA para continuar.")
+                return
+
+            code = (code or "").strip()
+            totp = pyotp.TOTP(usuario.totp_secret, digits=6, interval=30)
+
+            # Permitimos ligera tolerancia por desfasaje de reloj
+            if not (code.isdigit() and len(code) == 6 and totp.verify(code, valid_window=1)):
+                QMessageBox.critical(self, "Código incorrecto", "El código 2FA no es válido.")
+                return
 
         # ¿Debe cambiar contraseña? (primer login o vencida)
         expired = (not usuario.last_password_change) or ((now - usuario.last_password_change).days >= PASSWORD_MAX_AGE_DAYS)
@@ -190,6 +232,95 @@ class LoginForm(QWidget):
                 QMessageBox.information(self, "Acción requerida", "Debés cambiar tu contraseña para continuar.")
                 return
 
+        # Registrar acceso anterior y el actual (recién ahora que pasó todo)
+        usuario.previous_login_at = usuario.last_login_at
+        usuario.last_login_at = now
+        session.commit()
+
+        # --- Política 2FA: global o por usuario ---
+        require_global = (get_setting(session, "require_2fa_global", "0") == "1")
+        require_user = bool(getattr(usuario, "require_2fa", False))
+        need_token = require_global or require_user
+
+        if need_token:
+            # Si es requerido pero no está configurado: guiar a configurar
+            if not getattr(usuario, "totp_enabled", False) or not getattr(usuario, "totp_secret", None):
+                QMessageBox.information(
+                    self, "Token requerido",
+                    "Tu cuenta requiere un token de 6 dígitos (2FA). Vamos a configurarlo ahora."
+                )
+                dlg_setup = TwoFactorSetupDialog(self, usuario)
+                if dlg_setup.exec() != QDialog.Accepted:
+                    QMessageBox.warning(self, "Acceso cancelado", "No se completó la configuración del token.")
+                    return
+                # Se guardó totp_secret y totp_enabled=True dentro del diálogo
+
+            # Pedir el token
+            td = TokenDialog(self)
+            if td.exec() != QDialog.Accepted:
+                QMessageBox.information(self, "Acceso cancelado", "No se ingresó el token.")
+                return
+            code = td.get_code()
+            if not code.isdigit() or len(code) != 6:
+                QMessageBox.warning(self, "Código inválido", "Ingresá un código de 6 dígitos.")
+                return
+
+            totp = pyotp.TOTP(usuario.totp_secret, digits=6, interval=30)
+            if not totp.verify(code, valid_window=1):  # tolera leve desfase de reloj
+                QMessageBox.critical(self, "Token incorrecto", "El código ingresado no es válido.")
+                return
+
+        # 2FA: aplicar política (global o por usuario)
+        if not self._enforce_2fa(usuario):
+            return
+
         QMessageBox.information(self, "Éxito", "Inicio de sesión correcto.")
         self.on_login_success(usuario)
         self.close()
+
+    def _enforce_2fa(self, usuario) -> bool:
+        """
+        Devuelve True si puede continuar el login (2FA ok o no requerido).
+        Devuelve False si falla o si el usuario cancela.
+        """
+        # Lee política global (string "1" o "0")
+        require_global = (get_setting(session, "require_2fa_global", "0") == "1")
+        # Requerido si es global o este usuario lo exige
+        required = bool(getattr(usuario, "require_2fa", False)) or require_global
+
+        # Si no es requerido y el usuario no tiene 2FA activo, continuar sin pedir token
+        if not required and not getattr(usuario, "totp_enabled", False):
+            return True
+
+        # Si es requerido pero el usuario no tiene 2FA configurado, bloquear
+        if required and not getattr(usuario, "totp_enabled", False):
+            QMessageBox.warning(
+                self, "2FA requerido",
+                "Tu cuenta requiere ingreso con token, pero aún no está configurado.\n"
+                "Pedile al administrador que lo habilite o configurá tu 2FA."
+            )
+            return False
+
+        # Está habilitado (o requerido y habilitado): pedir código
+        code, ok = QInputDialog.getText(
+            self, "Verificación con token",
+            "Ingresá el código de 6 dígitos de tu app:",
+        )
+        if not ok:
+            return False
+
+        code = (code or "").strip()
+        if not code.isdigit() or len(code) != 6:
+            QMessageBox.critical(self, "Código inválido", "El token debe tener 6 dígitos.")
+            return False
+
+        try:
+            totp = pyotp.TOTP(usuario.totp_secret, digits=6, interval=30)
+            if totp.verify(code, valid_window=1):
+                return True
+        except Exception:
+            pass
+
+        QMessageBox.critical(self, "Código incorrecto", "El token no es válido. Probá con el código actual.")
+        return False
+
