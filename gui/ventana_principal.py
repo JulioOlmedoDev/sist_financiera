@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QMainWindow, QLabel, QWidget, QVBoxLayout, 
     QHBoxLayout, QPushButton, QFrame, QScrollArea, QSizePolicy,
-    QStackedWidget, QMessageBox, QDialog, QMenu, QToolButton
+    QStackedWidget, QMessageBox, QDialog, QMenu, QToolButton, QWidgetAction
 )
 from PySide6.QtGui import QPixmap, QIcon, QKeySequence, QShortcut
 from PySide6.QtCore import Qt, QSize
@@ -30,6 +30,7 @@ from gui.form_mi_perfil import FormMiPerfil
 from gui.change_password_dialog import ChangePasswordDialog
 from gui.recovery_dialog import RecoveryDialog
 from gui.lock_screen import LockScreenDialog
+from models import Personal
 from zoneinfo import ZoneInfo
 
 
@@ -171,32 +172,104 @@ class VentanaPrincipal(QMainWindow):
 
         # Estilo del botón de perfil (QToolButton en forma de "pill") y del QMenu
         perfil = """
+            /* Pastilla de perfil (QToolButton) */
             QToolButton {
-                padding: 6px 12px;
-                border: 1px solid #e3e3e3;
-                border-radius: 18px;         /* pill */
+                padding: 8px 14px;
+                border: 1px solid #d9c6ef;
+                border-radius: 20px;      /* pill */
                 background: #ffffff;
-                color: #424242;
-                font-weight: 600;
+                color: #4a148c;
+                font-weight: 700;
+                font-size: 15px;
             }
-            QToolButton:hover { background: #f7f7f7; }
-            QToolButton:pressed { background: #f0f0f0; }
+            QToolButton:hover { background: #f7f2ff; }
+            QToolButton:pressed { background: #efe6ff; }
 
+            /* Botón Bloquear (morado sólido, como antes) */
+            QPushButton#btnBloquear {
+                background-color: #9c27b0;
+                color: #ffffff;
+                border: none;
+                border-radius: 6px;
+                font-weight: 700;
+                padding: 6px 12px;
+            }
+            QPushButton#btnBloquear:hover { background-color: #7b1fa2; }
+            QPushButton#btnBloquear:pressed { background-color: #6a1b9a; }
+
+            /* Menú PRO (más grande y pulido) */
             QMenu {
                 background: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                padding: 6px;
+                border: 1px solid #e4e4e7;
+                border-radius: 12px;
+                padding: 10px;               /* más aire interno */
+                min-width: 260px;            /* ancho mínimo más cómodo */
             }
-            QMenu::item {
-                padding: 6px 12px;
-                border-radius: 4px;
-            }
-            QMenu::item:selected { background: #f4eef8; } /* lavanda suave */
             QMenu::separator {
                 height: 1px;
                 background: #eeeeee;
-                margin: 6px 8px;
+                margin: 8px 10px;            /* separadores con más respiro */
+            }
+            
+            /* ÚNICO indicador del menú en la pastilla de perfil */
+            QToolButton::menu-indicator {
+                subcontrol-origin: padding;
+                subcontrol-position: right center;   /* flecha a la derecha */
+                width: 12px;
+                height: 12px;
+                padding-left: 8px;                   /* respiro entre icono y flecha */
+            }            
+        """
+        perfil += """
+            /* Tarjeta superior del menú de perfil */
+            #menuUserCard {
+                border-radius: 10px;
+                padding: 10px 12px;
+                background: #fafafa;
+                margin: 4px 4px 8px 4px;
+            }
+            #menuUserName {
+                font-weight: 700;
+                font-size: 15px;
+                color: #2b2b2b;
+            }
+            #menuUserMeta {
+                font-size: 12px;
+                color: #7c7c7c;
+            }
+        """
+        perfil += """
+            /* Encabezado de grupo (CUENTA / SEGURIDAD) en formato chip */
+            #menuGroupHeader {
+                padding: 6px 10px;
+                margin: 4px 8px 6px 8px;
+                font-weight: 800;
+                font-size: 12px;
+                letter-spacing: 0.7px;
+                color: #6b21a8;                /* violeta más oscuro */
+                background: #faf5ff;           /* fondo muy suave */
+                border-left: 3px solid #9c27b0;/* acento a la izquierda */
+                border-radius: 6px;
+            }
+
+            /* Acciones con look de botón fantasma */
+            QMenu::item {
+                padding: 10px 12px;
+                margin: 4px 6px;
+                border: 1px solid #ede7f6;     /* borde suave */
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 15px;
+                color: #424242;
+                background: #ffffff;           /* base blanco */
+            }
+            QMenu::item:selected {
+                background: #f3e8ff;           /* hover violeta suave */
+                border-color: #d6c3ff;         /* borde un poco más marcado */
+                color: #4a148c;
+            }
+            QMenu::item:pressed {
+                background: #efe6ff;
             }
         """
 
@@ -523,6 +596,7 @@ class VentanaPrincipal(QMainWindow):
         self.btn_bloquear.setFixedHeight(32)
         self.btn_bloquear.setToolTip("Bloquear pantalla (Ctrl+L)")
         self.btn_bloquear.clicked.connect(self.bloquear_pantalla)
+        self.btn_bloquear.setObjectName("btnBloquear")
         header_layout.addWidget(self.btn_bloquear)
 
         # --- Badge de Usuario con menú (avatar + nombre) ---
@@ -532,18 +606,7 @@ class VentanaPrincipal(QMainWindow):
         self.btn_user.setAutoRaise(True)  # look minimalista
         self.btn_user.setFixedHeight(36)
         self.btn_user.setCursor(Qt.PointingHandCursor)
-        self.btn_user.setStyleSheet("""
-            QToolButton {
-                padding: 6px 12px;
-                border: 1px solid #e3e3e3;
-                border-radius: 18px;
-                background: #ffffff;
-                color: #424242;
-                font-weight: 600;
-            }
-            QToolButton:hover { background: #f7f7f7; }
-            QToolButton:pressed { background: #f0f0f0; }
-        """)
+        self.btn_user.setLayoutDirection(Qt.RightToLeft)
 
         self._refresh_user_badge()          # texto + icono
         self.btn_user.setMenu(self._build_profile_menu())  # menú inicial
@@ -844,37 +907,118 @@ class VentanaPrincipal(QMainWindow):
         """Arma el menú del badge de usuario según el estado (2FA on/off)."""
         menu = QMenu(self)
 
+        from PySide6.QtWidgets import QGraphicsDropShadowEffect
+        from PySide6.QtGui import QColor
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        shadow.setOffset(0, 6)
+        menu.setGraphicsEffect(shadow)
+
+        # Tarjeta superior con avatar + nombre
+        from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout
+        user_card_act = QWidgetAction(menu)
+
+        user_card = QWidget()
+        user_card.setObjectName("menuUserCard")
+        hl = QHBoxLayout(user_card)
+        hl.setContentsMargins(8, 6, 8, 6)
+        hl.setSpacing(10)
+
+        # Avatar redondo 36x36
+        avatar_lbl = QLabel()
+        avatar_icon = self._circle_avatar("static/icon.png", 36)
+        avatar_lbl.setPixmap(avatar_icon.pixmap(36, 36))
+        avatar_lbl.setFixedSize(36, 36)
+        hl.addWidget(avatar_lbl)
+
+        # Nombre + meta
+        vl = QVBoxLayout()
+        vl.setContentsMargins(0, 0, 0, 0)
+        vl.setSpacing(2)
+
+        name_lbl = QLabel(self._display_user_text())
+        name_lbl.setObjectName("menuUserName")
+        vl.addWidget(name_lbl)
+
+        # Línea meta (p.ej. “Mi perfil y seguridad”)
+        meta_lbl = QLabel("Mi perfil y seguridad")
+        meta_lbl.setObjectName("menuUserMeta")
+        vl.addWidget(meta_lbl)
+
+        hl.addLayout(vl)
+        user_card_act.setDefaultWidget(user_card)
+        menu.addAction(user_card_act)
+
+        header1 = QWidgetAction(menu)
+        lbl1 = QLabel("CUENTA")
+        lbl1.setObjectName("menuGroupHeader")
+        header1.setDefaultWidget(lbl1)
+        menu.addAction(header1)
+
         act_mi_perfil = menu.addAction("Mi perfil")
+        act_mi_perfil.setIcon(QIcon("static/icons/user-circle.png"))
         act_mi_perfil.triggered.connect(self.abrir_mi_perfil)
 
+        menu.addSeparator()
+        header2 = QWidgetAction(menu)
+        lbl2 = QLabel("SEGURIDAD")
+        lbl2.setObjectName("menuGroupHeader")
+        header2.setDefaultWidget(lbl2)
+        menu.addAction(header2)
+
         act_cambiar = menu.addAction("Cambiar contraseña…")
+        act_cambiar.setIcon(QIcon("static/icons/lock.png"))
         act_cambiar.triggered.connect(self.abrir_cambiar_contrasena)
 
         # Alterna según 2FA
         if getattr(self.usuario, "totp_enabled", False):
             act_2fa = menu.addAction("Desactivar ingreso con token")
+            act_2fa.setIcon(QIcon("static/icons/shield.png"))
             act_2fa.triggered.connect(self.desactivar_2fa)
         else:
             act_2fa = menu.addAction("Activar ingreso con token")
+            act_2fa.setIcon(QIcon("static/icons/shield.png")) 
             act_2fa.triggered.connect(self.abrir_configurar_2fa)
 
         menu.addSeparator()
         act_lock = menu.addAction("Bloquear pantalla")
+        act_lock.setIcon(QIcon("static/icons/lock.png"))  
         act_lock.triggered.connect(self.bloquear_pantalla)
 
         act_logout = menu.addAction("Cerrar sesión")
+        act_logout.setIcon(QIcon("static/icons/log-out.png"))  
         act_logout.triggered.connect(self.cerrar_sesion)
+        # spacer inferior para terminar con aire
+        bottom_spacer = QWidgetAction(menu)
+        _bottom = QWidget(); _bottom.setFixedHeight(6)
+        bottom_spacer.setDefaultWidget(_bottom)
+        menu.addAction(bottom_spacer)
 
         return menu
     
     def _display_user_text(self) -> str:
-        """Devuelve 'APELLIDO, Nombre' si hay datos en Personal; si no, cae al nombre de usuario."""
+        """
+        Muestra: USERNAME - APELLIDO, Nombre (iniciales mayúsculas).
+        Usa únicamente la FK usuarios.personal_id (sin heurísticas).
+        """
+        username = (self.usuario.nombre or "").upper()
         per = getattr(self.usuario, "personal", None)
-        if per and getattr(per, "apellidos", None) and getattr(per, "nombres", None):
-            apellido = (per.apellidos or "").upper()
-            nombre = " ".join(p.capitalize() for p in (per.nombres or "").split())
-            return f"{apellido}, {nombre}"
-        return f"{self.usuario.nombre}"
+
+        if not per and getattr(self.usuario, "personal_id", None):
+            try:
+                from database import session
+                per = session.get(Personal, self.usuario.personal_id)
+            except Exception:
+                per = None
+
+        if per and (getattr(per, "apellidos", None) or getattr(per, "nombres", None)):
+            apellido_upper = (per.apellidos or "").strip().upper()
+            nombre_cap = " ".join(p.capitalize() for p in (per.nombres or "").strip().split())
+            return f"{username} - {apellido_upper}, {nombre_cap}" if apellido_upper or nombre_cap else username
+        else:
+            return username
 
     def _refresh_user_badge(self) -> None:
         """Actualiza texto e icono del QToolButton de usuario."""
@@ -884,8 +1028,7 @@ class VentanaPrincipal(QMainWindow):
             self.btn_user.setIcon(self._circle_avatar(icon_path, 22))
             self.btn_user.setIconSize(QSize(22, 22))
 
-        # texto estilizado + triangulito
-        self.btn_user.setText(self._display_user_text() + "  ▾")
+        self.btn_user.setText(self._display_user_text())
         self.btn_user.setToolTip("Mi perfil y seguridad")
 
     def desactivar_2fa(self):
