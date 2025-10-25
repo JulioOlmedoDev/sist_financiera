@@ -60,6 +60,7 @@ class FormVenta(QWidget):
 
         # --- Scroll container ---
         scroll_area = QScrollArea(self)
+        self.scroll_area = scroll_area
         scroll_area.setWidgetResizable(True)
         scroll_widget = QFrame()
         scroll_layout = QVBoxLayout(scroll_widget)
@@ -261,7 +262,8 @@ class FormVenta(QWidget):
         self.tna_input.valueChanged.connect(self._ptf_dirty)
         self.tea_input.valueChanged.connect(self._ptf_dirty)
         self.plan_pago_combo.currentTextChanged.connect(self._ptf_dirty)
-
+        
+        self._lock_focus_to_tab_click()
         QTimer.singleShot(0, self._sync_button_sizes)
 
         # Carga inicial
@@ -284,6 +286,14 @@ class FormVenta(QWidget):
         self.btn_guardar.adjustSize()
         alto = self.btn_calcular.sizeHint().height() + 8
         self.btn_guardar.setMinimumHeight(alto)
+
+    def _lock_focus_to_tab_click(self):
+        """Evita que la rueda del mouse cambie el foco: quita WheelFocus de los inputs."""
+        clases = (QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox, ComboBoxSinScroll, DateEditSinScroll)
+        for cls in clases:
+            for w in self.findChildren(cls):
+                if w.focusPolicy() == Qt.WheelFocus:
+                    w.setFocusPolicy(Qt.StrongFocus)
 
     def _ptf_dirty(self, *args):
         self._ptf_calculado = False
@@ -313,8 +323,26 @@ class FormVenta(QWidget):
 
     # --- Eventos / lógica ---
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Wheel and isinstance(obj, (QSpinBox, QDoubleSpinBox)):
+        if event.type() == QEvent.Wheel and isinstance(
+            obj, (
+                QSpinBox, QDoubleSpinBox,
+                ComboBoxSinScroll, DateEditSinScroll,
+                QLineEdit, QTextEdit
+            )
+        ):
+            # Redirigimos la rueda al scroll principal
+            from PySide6.QtWidgets import QApplication
+            if hasattr(self, "scroll_area") and self.scroll_area is not None:
+                QApplication.sendEvent(self.scroll_area.viewport(), event)
             return True
+        # Si la rueda ocurre sobre el popup del QCompleter, también la pasamos al scroll
+        from PySide6.QtWidgets import QAbstractItemView
+        if event.type() == QEvent.Wheel and isinstance(obj, QAbstractItemView):
+            from PySide6.QtWidgets import QApplication
+            if hasattr(self, "scroll_area") and self.scroll_area is not None:
+                QApplication.sendEvent(self.scroll_area.viewport(), event)
+            return True
+
         if event.type() == QEvent.Enter and obj in getattr(self, "_tooltip_buttons", []):
             text = obj.toolTip() or ""
             if text.strip():
@@ -503,6 +531,7 @@ class FormVenta(QWidget):
         if es_finalizada or es_activa:
             self._mover_boton_guardar_al_final()
 
+        self._lock_focus_to_tab_click()
 
     # --- Cargas ---
     def cargar_clientes(self):
@@ -510,12 +539,14 @@ class FormVenta(QWidget):
         lista = [f"{c.apellidos}, {c.nombres} (DNI {c.dni})" for c in self.clientes]
         comp = QCompleter(lista); comp.setCaseSensitivity(Qt.CaseInsensitive)
         self.cliente_input.setCompleter(comp)
+        comp.popup().installEventFilter(self)
 
     def cargar_garantes(self):
         self.garantes = session.query(Garante).all()
         lista = [f"{g.apellidos}, {g.nombres} (DNI {g.dni})" for g in self.garantes]
         comp = QCompleter(lista); comp.setCaseSensitivity(Qt.CaseInsensitive)
         self.garante_input.setCompleter(comp)
+        comp.popup().installEventFilter(self)
 
     def cargar_productos(self):
         self.producto_combo.clear()
