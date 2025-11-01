@@ -257,8 +257,20 @@ def set_setting(db_session, key: str, value: str | None) -> None:
         s.value = value
     db_session.commit()
 
+# --- Bootstrap de permisos base ---
+def ensure_core_permissions(db_session) -> None:
+    """Crea permisos esenciales si no existen (idempotente)."""
+    try:
+        if not db_session.query(Permiso).filter_by(nombre="admin_total").first():
+            db_session.add(Permiso(nombre="admin_total"))
+            db_session.commit()
+    except Exception:
+        db_session.rollback()
+        # Si la app arranca antes de migrar tablas, no romper el boot.
+        # Podés forzar este ensure luego desde un script puntual.
 
 # Crear todas las tablas
 if __name__ == "__main__":
     Base.metadata.create_all(engine)
+    ensure_core_permissions(session)
     print("Base de datos y tablas creadas correctamente.")

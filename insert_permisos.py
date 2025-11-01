@@ -2,6 +2,7 @@ from database import session
 from models import Permiso
 
 permisos_base = [
+    "admin_total",
     "crear_venta",
     "ver_ventas",
     "cargar_cliente",

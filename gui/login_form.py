@@ -1,11 +1,12 @@
 from PySide6.QtWidgets import (
-    QWidget, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QMessageBox, QHBoxLayout, QSpacerItem, QSizePolicy, QDialog, QFormLayout, QInputDialog
+    QWidget, QLabel, QLineEdit, QPushButton,QVBoxLayout, QMessageBox, QHBoxLayout, 
+    QSpacerItem, QSizePolicy, QDialog, QFormLayout, QInputDialog
 )
-from PySide6.QtGui import QPixmap, QFont
+from PySide6.QtGui import QPixmap, QFont, QIntValidator
 from PySide6.QtCore import Qt
 from database import session
 from models import Usuario
+from sqlalchemy.orm import joinedload
 import hashlib
 import os
 from datetime import datetime, timedelta
@@ -104,6 +105,59 @@ class TokenDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         btns.addStretch(); btns.addWidget(btn_cancel); btns.addWidget(btn_ok)
         lay.addRow(btns)
+        # --- Branding CREDANZA (reversible) ---
+        self.setModal(True)
+        self.setMinimumWidth(420)
+
+        # Validación y UX
+        self.code.setValidator(QIntValidator(0, 999999, self))  # solo 0–999999
+        self.code.setMaxLength(6)                               # asegura 6 dígitos
+        btn_ok.setDefault(True)                                 # Enter = Verificar
+
+        # IDs para estilos
+        btn_ok.setObjectName("brandPrimary")
+        btn_cancel.setObjectName("brandGhost")
+
+        # Estilos del modal, inputs y botones (paleta violeta)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+                border-radius: 10px;
+            }
+            QLabel {
+                font-size: 15px;
+                color: #333333;
+            }
+            QLineEdit {
+                padding: 10px;
+                font-size: 18px;
+                letter-spacing: 3px;
+                border: 1px solid #d7c6ef;
+                border-radius: 8px;
+                background: #faf7ff;
+            }
+            QLineEdit:focus {
+                border: 1px solid #9c27b0;
+                background: #f7f2ff;
+            }
+            QPushButton {
+                min-width: 110px;
+                padding: 8px 14px;
+                border-radius: 8px;
+                font-weight: 700;
+            }
+            QPushButton:hover { opacity: .96; }
+            QPushButton:pressed { transform: translateY(1px); }
+
+            /* Colores corporativos */
+            QPushButton#brandPrimary {
+                background-color: #9c27b0; color: #ffffff;
+            }
+            QPushButton#brandGhost {
+                background-color: #efe6ff; color: #4a148c;
+                border: 1px solid #d9c6ef;
+            }
+        """)
 
     def get_code(self) -> str:
         return (self.code.text() or "").strip()
@@ -158,14 +212,16 @@ class LoginForm(QWidget):
         nombre_usuario = (self.user_input.text() or "").strip()
         password = (self.password_input.text() or "").strip()
 
-        usuario = session.query(Usuario).filter_by(nombre=nombre_usuario).first()
-
-        # 🔄 asegurar que no usamos un objeto cacheado
-        if usuario:
-            try:
-                session.refresh(usuario)   # fuerza round-trip a la BD
-            except Exception:
-                pass
+        usuario = (
+            session.query(Usuario)
+            .options(
+                joinedload(Usuario.permisos),   # <— eager-load permisos
+                joinedload(Usuario.rol),        # <— eager-load rol
+                joinedload(Usuario.personal),   # <— opcional, para el badge/menú
+            )
+            .filter_by(nombre=nombre_usuario)
+            .first()
+        )
 
         if (not usuario) or (not usuario.activo):
             QMessageBox.critical(self, "Error", "Usuario o contraseña incorrectos.")
@@ -200,29 +256,6 @@ class LoginForm(QWidget):
             if not usuario.last_password_change:
                 usuario.last_password_change = now
 
-        # --- Segundo factor (si está habilitado) ---
-        if getattr(usuario, "totp_enabled", False) and getattr(usuario, "totp_secret", None):
-            from PySide6.QtWidgets import QInputDialog, QLineEdit
-            import pyotp
-
-            code, ok = QInputDialog.getText(
-                self,
-                "Código 2FA",
-                "Ingresá el código de 6 dígitos:",
-                QLineEdit.Normal
-            )
-            if not ok:
-                QMessageBox.information(self, "Acción requerida", "Ingresá el código 2FA para continuar.")
-                return
-
-            code = (code or "").strip()
-            totp = pyotp.TOTP(usuario.totp_secret, digits=6, interval=30)
-
-            # Permitimos ligera tolerancia por desfasaje de reloj
-            if not (code.isdigit() and len(code) == 6 and totp.verify(code, valid_window=1)):
-                QMessageBox.critical(self, "Código incorrecto", "El código 2FA no es válido.")
-                return
-
         # ¿Debe cambiar contraseña? (primer login o vencida)
         expired = (not usuario.last_password_change) or ((now - usuario.last_password_change).days >= PASSWORD_MAX_AGE_DAYS)
         if usuario.must_change_password or expired:
@@ -237,10 +270,12 @@ class LoginForm(QWidget):
         usuario.last_login_at = now
         session.commit()
 
-        # --- Política 2FA: global o por usuario ---
+        # --- Política 2FA: global, por usuario, o voluntaria (si el usuario lo activó) ---
         require_global = (get_setting(session, "require_2fa_global", "0") == "1")
-        require_user = bool(getattr(usuario, "require_2fa", False))
-        need_token = require_global or require_user
+        require_user   = bool(getattr(usuario, "require_2fa", False))
+        is_enabled     = bool(getattr(usuario, "totp_enabled", False) and getattr(usuario, "totp_secret", None))
+        need_token     = require_global or require_user or is_enabled
+
 
         if need_token:
             # Si es requerido pero no está configurado: guiar a configurar
@@ -269,10 +304,6 @@ class LoginForm(QWidget):
             if not totp.verify(code, valid_window=1):  # tolera leve desfase de reloj
                 QMessageBox.critical(self, "Token incorrecto", "El código ingresado no es válido.")
                 return
-
-        # 2FA: aplicar política (global o por usuario)
-        if not self._enforce_2fa(usuario):
-            return
 
         QMessageBox.information(self, "Éxito", "Inicio de sesión correcto.")
         self.on_login_success(usuario)

@@ -49,5 +49,13 @@ else:
     )
 
     session.add(admin_user)
+    # Garantizar permiso raíz admin_total además del Rol Administrador
+    from models import Permiso
+    permiso_admin = session.query(Permiso).filter_by(nombre="admin_total").first()
+    if permiso_admin and permiso_admin not in admin_user.permisos:
+        admin_user.permisos.append(permiso_admin)
+    # Opcional de seguridad para primer ingreso
+    admin_user.activo = True
+    admin_user.must_change_password = True
     session.commit()
     print("✅ Superusuario creado correctamente: usuario = admin | contraseña = admin123")

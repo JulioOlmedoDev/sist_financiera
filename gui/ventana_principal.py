@@ -16,7 +16,7 @@ from gui.form_personal import FormPersonal
 from gui.form_garante import FormGarante
 from gui.form_usuario import FormUsuario
 from gui.form_permisos import FormPermisos
-from utils.permisos import tiene_permiso
+from utils.permisos import tiene_permiso, tiene_permiso_match
 from gui.form_consultas import FormConsultas
 from gui.form_gestion_clientes import FormGestionClientes
 from gui.form_gestion_garantes import FormGestionGarantes
@@ -88,6 +88,9 @@ class VentanaPrincipal(QMainWindow):
             QApplication.quit()
             return
         self.usuario = usuario  # Usuario logueado
+        print("DEBUG Rol:", getattr(getattr(self.usuario, "rol", None), "nombre", None))
+        print("DEBUG Permisos:", [p.nombre for p in (self.usuario.permisos or [])])
+
         self.setWindowTitle("CREDANZA - Sistema de Gestión")
         self.setGeometry(100, 100, 1200, 800)
         self.setMinimumSize(1000, 700)
@@ -360,38 +363,52 @@ class VentanaPrincipal(QMainWindow):
         self.menu_layout.addWidget(btn_inicio)
 
         # Ventas
-        if any(tiene_permiso(self.usuario, p) for p in ["cargar_cliente", "crear_venta"]):
+        if (
+            tiene_permiso_match(self.usuario, "cargar_cliente", "0010")   # (crear) clientes
+            or tiene_permiso_match(self.usuario, "crear_venta", "0060")   # (crear) nueva venta
+        ):
             btn_ventas = BotonNavegacion("  Ventas", "static/icons/shopping-cart.png")
             btn_ventas.clicked.connect(self._on_click(self._set_active_menu_btn, btn_ventas, lambda: self.mostrar_submenu("ventas")))
             self.menu_layout.addWidget(btn_ventas)
 
         # Consultas
-        if tiene_permiso(self.usuario, "ver_ventas"):
+        if tiene_permiso_match(self.usuario, "consultas", "0100", "ver_ventas"):
             btn_consultas = BotonNavegacion("  Consultas", "static/icons/search.png")
             btn_consultas.clicked.connect(self._on_click(self._set_active_menu_btn, btn_consultas, lambda: self.mostrar_submenu("consultas")))
             self.menu_layout.addWidget(btn_consultas)
 
         # Productos
-        if any(tiene_permiso(self.usuario, p) for p in ["crear_categoria", "crear_producto"]):
+        if (
+            tiene_permiso_match(self.usuario, "crear_categoria", "0200")
+            or tiene_permiso_match(self.usuario, "crear_producto", "0210")
+        ):
             btn_productos = BotonNavegacion("  Productos", "static/icons/package.png")
             btn_productos.clicked.connect(self._on_click(self._set_active_menu_btn, btn_productos, lambda: self.mostrar_submenu("productos")))
             self.menu_layout.addWidget(btn_productos)
 
         # Personal
-        if any(tiene_permiso(self.usuario, p) for p in ["cargar_personal", "asignar_usuario", "asignar_permisos"]):
+        if (
+            tiene_permiso_match(self.usuario, "0310", "cargar_personal")
+            or tiene_permiso_match(self.usuario, "0330", "0340", "asignar_usuario", "listado_usuarios")
+            or tiene_permiso_match(self.usuario, "0360", "asignar_permisos")
+            or tiene_permiso_match(self.usuario, "0300", "mi perfil")   # <-- habilita el módulo con Mi perfil
+        ):
             btn_personal = BotonNavegacion("  Personal", "static/icons/users.png")
             btn_personal.clicked.connect(self._on_click(self._set_active_menu_btn, btn_personal, lambda: self.mostrar_submenu("personal")))
             self.menu_layout.addWidget(btn_personal)
 
         # Tasas (no cambia al submenú)
-        btn_tasas = BotonNavegacion("  Configurar Tasas", "static/icons/percent.png")
-        btn_tasas.clicked.connect(self._on_click(self._set_active_menu_btn, btn_tasas, self.abrir_dialog_tasas))
-        self.menu_layout.addWidget(btn_tasas)
+        if tiene_permiso_match(self.usuario, "configurar_tasas", "0400"):
+            btn_tasas = BotonNavegacion("  Configurar Tasas", "static/icons/percent.png")
+            btn_tasas.clicked.connect(self._on_click(self._set_active_menu_btn, btn_tasas, self.abrir_dialog_tasas))
+            self.menu_layout.addWidget(btn_tasas)
+
 
         # Cobros
-        btn_cobros = BotonNavegacion("  Cobros", "static/icons/credit-card.png")
-        btn_cobros.clicked.connect(self._on_click(self._set_active_menu_btn, btn_cobros, lambda: self.mostrar_submenu("cobros")))
-        self.menu_layout.addWidget(btn_cobros)
+        if tiene_permiso_match(self.usuario, "cobros", "0500", "gestion cobros"):
+            btn_cobros = BotonNavegacion("  Cobros", "static/icons/credit-card.png")
+            btn_cobros.clicked.connect(self._on_click(self._set_active_menu_btn, btn_cobros, lambda: self.mostrar_submenu("cobros")))
+            self.menu_layout.addWidget(btn_cobros)
 
         self.menu_actual = "principal"
         # Reset subactivo al volver al menú principal
@@ -430,36 +447,44 @@ class VentanaPrincipal(QMainWindow):
 
         # Construcción según módulo + vista inicial por defecto
         if modulo == "ventas":
-            if tiene_permiso(self.usuario, "cargar_cliente"):
+            # Clientes
+            if tiene_permiso_match(self.usuario, "0010", "cargar_cliente"):
                 btn_clientes = BotonNavegacion("  Clientes", "static/icons/users.png")
                 btn_clientes.clicked.connect(self._on_click(self._set_active_sub_btn, btn_clientes, self.abrir_form_cliente))
                 self.menu_layout.addWidget(btn_clientes)
 
+            # Garantes
+            if tiene_permiso_match(self.usuario, "0020", "cargar_garante"):
                 btn_garantes = BotonNavegacion("  Garantes", "static/icons/user-check.png")
                 btn_garantes.clicked.connect(self._on_click(self._set_active_sub_btn, btn_garantes, self.abrir_form_garante))
                 self.menu_layout.addWidget(btn_garantes)
 
+            # Listados
+            if tiene_permiso_match(self.usuario, "0030", "listado_clientes"):
                 btn_gestion_clientes = BotonNavegacion("  Listado de Clientes", "static/icons/list.png")
                 btn_gestion_clientes.clicked.connect(self._on_click(self._set_active_sub_btn, btn_gestion_clientes, self.abrir_gestion_clientes))
                 self.menu_layout.addWidget(btn_gestion_clientes)
 
+            if tiene_permiso_match(self.usuario, "0040", "listado_garantes"):
                 btn_gestion_garantes = BotonNavegacion("  Listado de Garantes", "static/icons/list.png")
                 btn_gestion_garantes.clicked.connect(self._on_click(self._set_active_sub_btn, btn_gestion_garantes, self.abrir_gestion_garantes))
                 self.menu_layout.addWidget(btn_gestion_garantes)
 
+            if tiene_permiso_match(self.usuario, "0050", "listado_ventas", "ver_ventas"):
                 btn_listado_ventas = BotonNavegacion("  Listado de Ventas", "static/icons/list.png")
                 btn_listado_ventas.clicked.connect(self._on_click(self._set_active_sub_btn, btn_listado_ventas, self.abrir_listado_ventas))
                 self.menu_layout.addWidget(btn_listado_ventas)
 
-            if tiene_permiso(self.usuario, "crear_venta"):
+            # Nueva venta
+            if tiene_permiso_match(self.usuario, "0060", "crear_venta"):
                 btn_ventas = BotonNavegacion("  Nueva Venta", "static/icons/dollar-sign.png")
                 btn_ventas.clicked.connect(self._on_click(self._set_active_sub_btn, btn_ventas, self.abrir_form_venta))
                 self.menu_layout.addWidget(btn_ventas)
 
-            # Vista inicial por defecto
+            # Vista inicial por defecto (si tiene listado)
             if 'btn_listado_ventas' in locals():
                 self._set_active_sub_btn(btn_listado_ventas)
-            self.abrir_listado_ventas()
+                self.abrir_listado_ventas()
 
         elif modulo == "consultas":
             btn_consultas = BotonNavegacion("  Consultas Generales", "static/icons/search.png")
@@ -470,12 +495,12 @@ class VentanaPrincipal(QMainWindow):
             self.abrir_form_consultas()
 
         elif modulo == "productos":
-            if tiene_permiso(self.usuario, "crear_categoria"):
+            if tiene_permiso_match(self.usuario, "crear_categoria", "0200"):
                 btn_categorias = BotonNavegacion("  Categorías", "static/icons/tag.png")
                 btn_categorias.clicked.connect(self._on_click(self._set_active_sub_btn, btn_categorias, self.abrir_form_categoria))
                 self.menu_layout.addWidget(btn_categorias)
 
-            if tiene_permiso(self.usuario, "crear_producto"):
+            if tiene_permiso_match(self.usuario, "crear_producto", "0210"):
                 btn_productos = BotonNavegacion("  Productos", "static/icons/box.png")
                 btn_productos.clicked.connect(self._on_click(self._set_active_sub_btn, btn_productos, self.abrir_form_producto))
                 self.menu_layout.addWidget(btn_productos)
@@ -492,7 +517,7 @@ class VentanaPrincipal(QMainWindow):
             btn_mi_perfil.clicked.connect(self._on_click(self._set_active_sub_btn, btn_mi_perfil, self.abrir_mi_perfil))
             self.menu_layout.addWidget(btn_mi_perfil)
 
-            if tiene_permiso(self.usuario, "cargar_personal"):
+            if tiene_permiso_match(self.usuario, "cargar_personal", "0310"):
                 btn_personal = BotonNavegacion("  Personal", "static/icons/user-plus.png")
                 btn_personal.clicked.connect(self._on_click(self._set_active_sub_btn, btn_personal, self.abrir_form_personal))
                 self.menu_layout.addWidget(btn_personal)
@@ -501,7 +526,7 @@ class VentanaPrincipal(QMainWindow):
                 btn_gestion_personal.clicked.connect(self._on_click(self._set_active_sub_btn, btn_gestion_personal, self.abrir_gestion_personal))
                 self.menu_layout.addWidget(btn_gestion_personal)
 
-            if tiene_permiso(self.usuario, "asignar_usuario"):
+            if tiene_permiso_match(self.usuario, "asignar_usuario", "0330", "0340"):
                 btn_usuarios = BotonNavegacion("  Usuarios", "static/icons/user.png")
                 btn_usuarios.clicked.connect(self._on_click(self._set_active_sub_btn, btn_usuarios, self.abrir_form_usuario))
                 self.menu_layout.addWidget(btn_usuarios)
@@ -523,40 +548,43 @@ class VentanaPrincipal(QMainWindow):
             self.abrir_gestion_personal()
 
         elif modulo == "cobros":
-            btn_gestion_cobros = BotonNavegacion("  Gestión de Cobros", "static/icons/credit-card.png")
-            btn_gestion_cobros.clicked.connect(self._on_click(self._set_active_sub_btn, btn_gestion_cobros, self.abrir_form_cobros))
-            self.menu_layout.addWidget(btn_gestion_cobros)
+            if tiene_permiso_match(self.usuario, "0500", "cobros", "gestion cobros"):
+                btn_gestion_cobros = BotonNavegacion("  Gestión de Cobros", "static/icons/credit-card.png")
+                btn_gestion_cobros.clicked.connect(self._on_click(self._set_active_sub_btn, btn_gestion_cobros, self.abrir_form_cobros))
+                self.menu_layout.addWidget(btn_gestion_cobros)
 
-            # Portada con botón central (no resalta submenú por defecto)
-            portada = QWidget()
-            lay = QVBoxLayout(portada)
-            lay.setAlignment(Qt.AlignCenter)
+                # Portada con botón central
+                portada = QWidget()
+                lay = QVBoxLayout(portada)
+                lay.setAlignment(Qt.AlignCenter)
 
-            lbl = QLabel("Módulo Cobros")
-            lbl.setObjectName("subtitulo")
-            lbl.setAlignment(Qt.AlignCenter)
-            lay.addWidget(lbl)
+                lbl = QLabel("Módulo Cobros")
+                lbl.setObjectName("subtitulo")
+                lbl.setAlignment(Qt.AlignCenter)
+                lay.addWidget(lbl)
 
-            btn_abrir = QPushButton("Abrir Gestión de Cobros")
-            btn_abrir.setIcon(QIcon("static/icons/credit-card.png"))
-            btn_abrir.setIconSize(QSize(32, 32))
-            btn_abrir.setFixedSize(280, 60)
-            btn_abrir.setStyleSheet("""
-                QPushButton {
-                    background-color: #9c27b0;
-                    color: white;
-                    font-size: 16px;
-                    font-weight: bold;
-                    border-radius: 6px;
-                    padding: 8px 12px;
-                }
-                QPushButton:hover { background-color: #7b1fa2; }
-                QPushButton:pressed { background-color: #6a1b9a; }
-            """)
-            btn_abrir.clicked.connect(self.abrir_form_cobros)
-            lay.addWidget(btn_abrir)
+                btn_abrir = QPushButton("Abrir Gestión de Cobros")
+                btn_abrir.setIcon(QIcon("static/icons/credit-card.png"))
+                btn_abrir.setIconSize(QSize(32, 32))
+                btn_abrir.setFixedSize(280, 60)
+                btn_abrir.setStyleSheet("""
+                    QPushButton {
+                        background-color: #9c27b0;
+                        color: white;
+                        font-size: 16px;
+                        font-weight: bold;
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                    }
+                    QPushButton:hover { background-color: #7b1fa2; }
+                    QPushButton:pressed { background-color: #6a1b9a; }
+                """)
+                btn_abrir.clicked.connect(self.abrir_form_cobros)
+                lay.addWidget(btn_abrir)
 
-            self.mostrar_formulario(portada, "Cobros")
+                # 👈 mover acá adentro
+                self.mostrar_formulario(portada, "Cobros")
+
 
         self.menu_actual = modulo
 

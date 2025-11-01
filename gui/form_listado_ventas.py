@@ -10,6 +10,7 @@ from models import Venta, Cobro, Cliente
 from gui.form_venta import FormVenta
 from utils.generador_contrato import generar_contrato_word, generar_contrato_excel
 from utils.generador_pagare import generar_pagare_word, generar_pagare_excel
+from utils.permisos import tiene_permiso_match
 import os
 import platform
 import unicodedata
@@ -142,25 +143,41 @@ class FormVentas(QWidget):
                     personal.append(f"Cob: {venta.cobrador.nombres}")
                 self.tabla.setItem(row_index, 5, QTableWidgetItem(" / ".join(personal)))
 
-                # Botones
-                btn_ver = QPushButton("Detalle")
-                btn_ver.clicked.connect(lambda checked=False, vid=venta.id: self.ver_detalle_venta(vid))
-                self.tabla.setCellWidget(row_index, 6, btn_ver)
+                # Botones condicionados por permisos
+                # 0051: Detalle
+                if tiene_permiso_match(self.usuario_actual, "0051", "detalle de venta"):
+                    btn_ver = QPushButton("Detalle")
+                    btn_ver.clicked.connect(lambda checked=False, vid=venta.id: self.ver_detalle_venta(vid))
+                    self.tabla.setCellWidget(row_index, 6, btn_ver)
+                else:
+                    self.tabla.setCellWidget(row_index, 6, None)
 
-                btn_editar = QPushButton("Editar")
-                btn_editar.clicked.connect(lambda checked=False, vid=venta.id: self.editar_venta(vid))
-                self.tabla.setCellWidget(row_index, 7, btn_editar)
+                # 0052: Editar
+                if tiene_permiso_match(self.usuario_actual, "0052", "editar venta"):
+                    btn_editar = QPushButton("Editar")
+                    btn_editar.clicked.connect(lambda checked=False, vid=venta.id: self.editar_venta(vid))
+                    self.tabla.setCellWidget(row_index, 7, btn_editar)
+                else:
+                    self.tabla.setCellWidget(row_index, 7, None)
 
-                btn_doc = QPushButton("Abrir Docs")
-                btn_doc.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_documentos_venta(vid))
-                self.tabla.setCellWidget(row_index, 8, btn_doc)
+                # 0053: Abrir documentos
+                if tiene_permiso_match(self.usuario_actual, "0053", "abrir documentos"):
+                    btn_doc = QPushButton("Abrir Docs")
+                    btn_doc.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_documentos_venta(vid))
+                    self.tabla.setCellWidget(row_index, 8, btn_doc)
+                else:
+                    self.tabla.setCellWidget(row_index, 8, None)
 
-                btn_cobros = QPushButton("Cobros")
-                btn_cobros.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_cobros(vid))
-                self.tabla.setCellWidget(row_index, 9, btn_cobros)
+                # 0054: Registrar cobros
+                if tiene_permiso_match(self.usuario_actual, "0054", "registrar cobros"):
+                    btn_cobros = QPushButton("Cobros")
+                    btn_cobros.clicked.connect(lambda checked=False, vid=venta.id: self.abrir_cobros(vid))
+                    self.tabla.setCellWidget(row_index, 9, btn_cobros)
+                else:
+                    self.tabla.setCellWidget(row_index, 9, None)
+
         finally:
             self.tabla.setUpdatesEnabled(True)
-
 
     # ---------- acciones ----------
 

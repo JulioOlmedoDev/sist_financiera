@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from database import session
-from models import Usuario, Personal
+from models import Usuario, Personal, Rol
 from gui.form_usuario import FormUsuario
 
 class FormListadoUsuarios(QWidget):
@@ -46,12 +46,12 @@ class FormListadoUsuarios(QWidget):
         layout.setSpacing(20)
 
         titulo = QLabel("Listado de Usuarios")
-        titulo.setStyleSheet("color: #6a1b9a;")  # violeta
+        titulo.setStyleSheet("color: #6a1b9a;")
         layout.addWidget(titulo)
 
         self.tabla = QTableWidget()
-        self.tabla.setColumnCount(5)
-        self.tabla.setHorizontalHeaderLabels(["ID", "Nombre", "Email", "Personal", "Activo"])
+        self.tabla.setColumnCount(6)
+        self.tabla.setHorizontalHeaderLabels(["ID", "Nombre", "Email", "Rol", "Personal", "Activo"])
         self.tabla.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabla.setSelectionMode(QTableWidget.SingleSelection)
@@ -64,10 +64,10 @@ class FormListadoUsuarios(QWidget):
         botones.addStretch()
 
         self.btn_editar = QPushButton("Editar Usuario")
-        self.btn_editar.setStyleSheet("background-color: #7b1fa2; color: white;")  # violeta
+        self.btn_editar.setStyleSheet("background-color: #7b1fa2; color: white;")
 
         self.btn_estado = QPushButton("Activar/Desactivar")
-        self.btn_estado.setStyleSheet("background-color: #b0bec5; color: black;")  # gris claro
+        self.btn_estado.setStyleSheet("background-color: #b0bec5; color: black;")
 
         self.btn_editar.clicked.connect(self.editar_usuario)
         self.btn_estado.clicked.connect(self.cambiar_estado_usuario)
@@ -93,12 +93,21 @@ class FormListadoUsuarios(QWidget):
             self.tabla.setItem(i, 1, QTableWidgetItem(u.nombre or ""))
             self.tabla.setItem(i, 2, QTableWidgetItem(u.email or ""))
 
+            # Rol
+            rol_nombre = ""
+            if getattr(u, "rol_id", None):
+                r = session.query(Rol).get(u.rol_id)
+                rol_nombre = r.nombre if r else ""
+            self.tabla.setItem(i, 3, QTableWidgetItem(rol_nombre))
+
+            # Personal
             personal = session.query(Personal).get(u.personal_id)
             nombre_personal = f"{personal.apellidos}, {personal.nombres}" if personal else ""
-            self.tabla.setItem(i, 3, QTableWidgetItem(nombre_personal))
+            self.tabla.setItem(i, 4, QTableWidgetItem(nombre_personal))
 
+            # Activo
             estado = "Sí" if u.activo else "No"
-            self.tabla.setItem(i, 4, QTableWidgetItem(estado))
+            self.tabla.setItem(i, 5, QTableWidgetItem(estado))
 
     def usuario_seleccionado(self):
         fila = self.tabla.currentRow()
@@ -120,7 +129,23 @@ class FormListadoUsuarios(QWidget):
             QMessageBox.warning(self, "Error", "Seleccioná un usuario.")
             return
 
+        from models import Rol as RolModel
+
         if usuario.activo:
+            # No permitir desactivar al único admin activo
+            if usuario.rol and usuario.rol.nombre == "Administrador":
+                admins_activos = session.query(Usuario).join(RolModel).filter(
+                    RolModel.nombre == "Administrador",
+                    Usuario.activo == True
+                ).count()
+                if admins_activos <= 1:
+                    QMessageBox.warning(
+                        self,
+                        "Acción no permitida",
+                        "No se puede desactivar al único administrador activo del sistema."
+                    )
+                    return
+
             confirmar = QMessageBox.question(
                 self, "Desactivar", "¿Desactivar este usuario?",
                 QMessageBox.Yes | QMessageBox.No
@@ -157,3 +182,5 @@ class FormListadoUsuarios(QWidget):
                 self.form.personal_combo.setCurrentIndex(index)
         self.form.usuario_guardado.connect(self.cargar_datos)
         self.form.showMaximized()
+
+
