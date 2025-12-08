@@ -7,17 +7,39 @@ from PySide6.QtGui import QRegularExpressionValidator
 
 from database import session
 from models import Personal
+from utils.permisos import es_admin, tiene_permiso
 
 class FormPersonal(QWidget):
     personal_guardado = Signal()
 
-    def __init__(self, personal_id=None):
+    def __init__(self, personal_id=None, usuario=None):
         super().__init__()
+        self.usuario = usuario
         self.personal_id = personal_id
         self.editando = personal_id is not None
 
+        # --- GUARDA DE PERMISOS ---
+        if not usuario:
+            QMessageBox.critical(self, "Acceso denegado", "Usuario no autenticado.")
+            self.close()
+            return
+
+        # crear nuevo personal
+        if not self.editando:
+            if not (es_admin(usuario) or tiene_permiso(usuario, "0310 (crear) personal")):
+                QMessageBox.critical(self, "Acceso denegado", "No tenés permiso para crear personal.")
+                self.close()
+                return
+
+        # editar personal existente
+        if self.editando:
+            if not (es_admin(usuario) or tiene_permiso(usuario, "0320 (ver/editar) listado de personal")):
+                QMessageBox.critical(self, "Acceso denegado", "No tenés permiso para editar personal.")
+                self.close()
+                return
+        # ----------------------------------------------------
+
         self.setWindowTitle("Gestión de Personal")
-        self.showMaximized()
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)

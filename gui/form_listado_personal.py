@@ -1,38 +1,74 @@
+# gui/form_listado_personal.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QTableWidget, QTableWidgetItem,
-    QPushButton, QHBoxLayout, QMessageBox, QLabel, QHeaderView
+    QPushButton, QHBoxLayout, QMessageBox, QLabel, QHeaderView, QSizePolicy
 )
 from PySide6.QtCore import Qt
 from database import session
 from models import Personal
 from gui.form_personal import FormPersonal
-
+from utils.permisos import tiene_permiso, es_admin
 
 class FormListadoPersonal(QWidget):
-    def __init__(self):
+    """
+    Listado de Personal — fusión de las versiones previas.
+    - Usa guardas de permisos (es_admin o permisos concretos).
+    - Interfaz limpia (estética similar a la versión que preferías).
+    - Botón Editar por fila (abre FormPersonal con usuario pasado).
+    - Botón Eliminar por fila solo si el usuario tiene permiso.
+    - Buscador por apellido, nombre o DNI.
+    """
+
+    def __init__(self, usuario=None):
         super().__init__()
+
+        # --------------------- GUARDA DE ACCESO ---------------------
+        if usuario is None:
+            QMessageBox.critical(self, "Acceso denegado", "Usuario no autenticado.")
+            self.close()
+            return
+
+        # Permisos: ver listado de personal
+        # Consideramos como nombre de permiso legible "0320 (ver/editar) listado de personal"
+        if not (es_admin(usuario) or tiene_permiso(usuario, "0320 (ver/editar) listado de personal")):
+            QMessageBox.critical(self, "Acceso denegado", "No tenés permisos para acceder a esta pantalla.")
+            self.close()
+            return
+        # -------------------------------------------------------------
+
+        self.usuario = usuario
         self.setWindowTitle("Listado de Personal")
         self.setMinimumSize(1100, 600)
 
+        # Layout principal
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(16)
 
+        # Título (opcional)
+        titulo = QLabel("Listado de Personal")
+        titulo.setStyleSheet("font-size: 20px; font-weight: bold; color: #6a1b9a;")
+        layout.addWidget(titulo)
+
+        # Buscador
         self.buscador = QLineEdit()
         self.buscador.setPlaceholderText("Buscar por apellido, nombre o DNI")
         self.buscador.setMinimumHeight(36)
         self.buscador.textChanged.connect(self.actualizar_tabla)
         layout.addWidget(self.buscador)
 
+        # Tabla
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(6)
-        self.tabla.setHorizontalHeaderLabels(["Apellidos", "Nombres", "DNI", "Email", "Tipo", "Acciones"])
+        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "DNI", "Tipo", "Acciones"])
         self.tabla.verticalHeader().setVisible(False)
         self.tabla.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabla.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tabla.setStyleSheet("""
             QTableWidget {
                 font-size: 14px;
+                background-color: #ffffff;
             }
             QHeaderView::section {
                 background-color: #f0f0f0;
@@ -45,83 +81,126 @@ class FormListadoPersonal(QWidget):
         header.setStretchLastSection(False)
         header.setSectionResizeMode(QHeaderView.Stretch)
 
-        # Fijamos solo la columna de acciones
-        for i in range(self.tabla.columnCount()):
-            if i == 5:  # Acciones
-                header.setSectionResizeMode(i, QHeaderView.Fixed)
-                self.tabla.setColumnWidth(i, 200)
-
+        # Forzamos ancho fijo para columna "Acciones"
+        header.setSectionResizeMode(5, QHeaderView.Fixed)
+        self.tabla.setColumnWidth(5, 220)
 
         layout.addWidget(self.tabla)
 
+        # Info/leyenda
+        leyenda = QLabel("Buscar por apellidos, nombres o DNI. Seleccioná 'Editar' para modificar un registro.")
+        leyenda.setStyleSheet("color: #444; font-size: 12px;")
+        layout.addWidget(leyenda)
+
+        # Carga inicial
         self.actualizar_tabla()
 
+    # --------------------------- Tabla ---------------------------
     def actualizar_tabla(self):
-        texto = self.buscador.text().lower()
-        personales = session.query(Personal).all()
-        filtrados = [
-            p for p in personales if
-            texto in (p.apellidos or "").lower()
-            or texto in (p.nombres or "").lower()
-            or texto in (p.dni or "")
-        ]
+        texto = (self.buscador.text() or "").strip().lower()
+        try:
+            personales = session.query(Personal).order_by(Personal.apellidos, Personal.nombres).all()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo consultar personal:\n{e}")
+            personales = []
+
+        filtrados = []
+        if texto == "":
+            filtrados = personales
+        else:
+            for p in personales:
+                if (texto in (p.apellidos or "").lower()
+                    or texto in (p.nombres or "").lower()
+                    or texto in (p.dni or "").lower()):
+                    filtrados.append(p)
 
         self.tabla.setRowCount(len(filtrados))
 
         for row, persona in enumerate(filtrados):
-            self.tabla.setItem(row, 0, QTableWidgetItem(persona.apellidos or ""))
-            self.tabla.setItem(row, 1, QTableWidgetItem(persona.nombres or ""))
-            self.tabla.setItem(row, 2, QTableWidgetItem(persona.dni or ""))
-            self.tabla.setItem(row, 3, QTableWidgetItem(persona.email or ""))
+            # ID (col 0)
+            self.tabla.setItem(row, 0, QTableWidgetItem(str(persona.id)))
+            # Apellidos (col 1)
+            self.tabla.setItem(row, 1, QTableWidgetItem(persona.apellidos or ""))
+            # Nombres (col 2)
+            self.tabla.setItem(row, 2, QTableWidgetItem(persona.nombres or ""))
+            # DNI (col 3)
+            self.tabla.setItem(row, 3, QTableWidgetItem(persona.dni or ""))
+            # Tipo (col 4)
             self.tabla.setItem(row, 4, QTableWidgetItem(persona.tipo or ""))
 
-            # Botones
+            # Acciones (col 5)
             btn_editar = QPushButton("✏️ Editar")
-            btn_eliminar = QPushButton("🗑 Eliminar")
+            btn_editar.setCursor(Qt.PointingHandCursor)
+            btn_editar.setToolTip("Editar personal")
+            btn_editar.setProperty("role", "editar")
+            btn_editar.setStyleSheet("""
+                QPushButton { background-color: #9c27b0; color: white; padding: 6px 10px; border-radius: 6px; font-weight: bold; }
+                QPushButton:hover { background-color: #7b1fa2; }
+            """)
 
-            for btn in [btn_editar, btn_eliminar]:
-                btn.setCursor(Qt.PointingHandCursor)
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #9c27b0;
-                        color: white;
-                        padding: 5px 10px;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 13px;
-                    }
-                    QPushButton:hover {
-                        background-color: #7b1fa2;
-                    }
+            # Solo mostrar eliminar si el usuario tiene permiso para borrar (o es admin)
+            puede_eliminar = es_admin(self.usuario) or tiene_permiso(self.usuario, "0320 (ver/editar) listado de personal (eliminar)")
+            btn_eliminar = QPushButton("🗑 Eliminar") if puede_eliminar else None
+            if btn_eliminar:
+                btn_eliminar.setCursor(Qt.PointingHandCursor)
+                btn_eliminar.setToolTip("Eliminar personal")
+                btn_eliminar.setProperty("role", "eliminar")
+                btn_eliminar.setStyleSheet("""
+                    QPushButton { background-color: #e53935; color: white; padding: 6px 10px; border-radius: 6px; font-weight: bold; }
+                    QPushButton:hover { background-color: #c62828; }
                 """)
 
-            btn_editar.clicked.connect(lambda _, p=persona: self.abrir_formulario_edicion(p.id))
-            btn_eliminar.clicked.connect(lambda _, p=persona: self.eliminar_personal(p.id))
+            # Conexiones seguras (cierres sobre valores actuales)
+            btn_editar.clicked.connect(lambda checked=False, pid=persona.id: self._abrir_edicion(pid))
+            if btn_eliminar:
+                btn_eliminar.clicked.connect(self._generar_callback_eliminar(persona.id))
 
+            # Contenedor horizontal para botones
             contenedor = QHBoxLayout()
-            contenedor.setContentsMargins(0, 0, 0, 0)
-            contenedor.setSpacing(10)
+            contenedor.setContentsMargins(6, 2, 6, 2)
+            contenedor.setSpacing(8)
             contenedor.addWidget(btn_editar)
-            contenedor.addWidget(btn_eliminar)
+            if btn_eliminar:
+                contenedor.addWidget(btn_eliminar)
+            contenedor.addStretch()
 
             acciones_widget = QWidget()
             acciones_widget.setLayout(contenedor)
             self.tabla.setCellWidget(row, 5, acciones_widget)
 
-    def abrir_formulario_edicion(self, personal_id):
-        self.form = FormPersonal(personal_id=personal_id)
-        self.form.personal_guardado.connect(self.actualizar_tabla)
-        self.form.show()
-
-    def eliminar_personal(self, personal_id):
-        confirmacion = QMessageBox.question(self, "Eliminar", "¿Eliminar este personal?", QMessageBox.Yes | QMessageBox.No)
-        if confirmacion == QMessageBox.Yes:
+    def _generar_callback_eliminar(self, personal_id):
+        def callback(checked=False):
+            confirm = QMessageBox.question(
+                self, "Eliminar personal",
+                "¿Estás seguro de eliminar este personal? Esta acción es irreversible.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if confirm != QMessageBox.Yes:
+                return
             try:
-                persona = session.query(Personal).get(personal_id)
+                persona = session.get(Personal, personal_id)
+                if not persona:
+                    QMessageBox.warning(self, "No encontrado", "El personal ya no existe.")
+                    self.actualizar_tabla()
+                    return
+
+                # Evitar eliminar si existen dependencias críticas (opcional — solo ejemplo)
+                # Podés añadir cheques aquí si querés impedir eliminar personal que tenga ventas creadas, etc.
+
                 session.delete(persona)
                 session.commit()
-                self.actualizar_tabla()
                 QMessageBox.information(self, "Eliminado", "Personal eliminado correctamente.")
+                self.actualizar_tabla()
             except Exception as e:
                 session.rollback()
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar:\n{e}")
+        return callback
+    
+    def _abrir_edicion(self, personal_id):
+        self.dlg_personal = FormPersonal(personal_id=personal_id, usuario=self.usuario)
+        self.dlg_personal.personal_guardado.connect(self.actualizar_tabla)
+        self.dlg_personal.setWindowModality(Qt.ApplicationModal)
+        self.dlg_personal.setAttribute(Qt.WA_DeleteOnClose)
+        self.dlg_personal.showMaximized()
+
+

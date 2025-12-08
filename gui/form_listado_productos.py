@@ -1,18 +1,26 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout,
-    QFrame, QMessageBox, QScrollArea, QSizePolicy, QDialog # Importar QDialog
+    QFrame, QMessageBox, QScrollArea, QSizePolicy, QDialog
 )
 from PySide6.QtCore import Qt, QSize, QTimer
 from database import session
 from models import Categoria, Producto
 from gui.form_categoria import FormCategoria
 from gui.form_producto import FormProducto
+from utils.guards import require_perm_or_close
+from utils.permisos import tiene_permiso_match
 from sqlalchemy.exc import IntegrityError
 
 
 class FormListadoProductos(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None, usuario=None):
+        super().__init__(parent)
+        # --- seguridad: guard interna ---
+        self.usuario = usuario or getattr(parent, "usuario", None)
+        tokens = ("0220", "ver_listado_productos")  # token para ver el listado de productos
+        if not require_perm_or_close(self, self.usuario, *tokens):
+            return
+        # --- fin guard ---
         self.setWindowTitle("Gestión de Categorías y Productos")
         
         # Crear scroll area principal
@@ -406,7 +414,7 @@ class FormListadoProductos(QWidget):
         self.layout_principal.addStretch()
 
     def abrir_nueva_categoria(self):
-        dialog = FormCategoria()
+        dialog = FormCategoria(parent=self, usuario=self.usuario)
         print("DEBUG: Abriendo FormCategoria como diálogo modal.")
         result = dialog.exec()
         print(f"DEBUG: FormCategoria se cerró con resultado: {result} (Accepted={QDialog.Accepted}, Rejected={QDialog.Rejected})")
@@ -430,7 +438,7 @@ class FormListadoProductos(QWidget):
 
     def abrir_editar_categoria(self, categoria_id):
         """Abre el formulario para editar una categoría existente como un QDialog modal."""
-        dialog = FormCategoria(categoria_id)
+        dialog = FormCategoria(categoria_id, parent=self, usuario=self.usuario)
         if dialog.exec() == QDialog.Accepted:
             self.cargar_listado() # Refrescar el listado principal
         else:

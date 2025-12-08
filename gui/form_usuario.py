@@ -10,8 +10,29 @@ import hashlib
 class FormUsuario(QWidget):
     usuario_guardado = Signal()
 
-    def __init__(self):
+    def __init__(self, usuario=None):
+        from models import Rol  # evitar import circular
         super().__init__()
+
+        self.usuario = usuario
+        # --- GUARDIA DE ACCESO ---
+        if self.usuario is None:
+            QMessageBox.warning(self, "Acceso denegado", "No hay usuario autenticado.")
+            self.close()
+            return
+
+        rol = getattr(self.usuario, "rol", None)
+        nombre_rol = getattr(rol, "nombre", "").lower() if rol else ""
+
+        # Solo dueño / admin / gerente pueden gestionar usuarios
+        permisos_autorizados = ["owner", "administrador", "gerente"]
+
+        if nombre_rol not in permisos_autorizados:
+            QMessageBox.warning(self, "Acceso denegado",
+                                "No tenés permisos para acceder a este módulo.")
+            self.close()
+            return
+
         self.setWindowTitle("Gestión de Usuario")
         self.setMinimumSize(800, 400)
         self.usuario_existente = None

@@ -6,14 +6,23 @@ from PySide6.QtCore import Qt, Signal
 
 from database import session
 from models import Categoria, Producto
+from utils.guards import require_perm_or_close
 
 class FormCategoria(QDialog):
     category_action_completed = Signal(str, int)
 
-    def __init__(self, categoria_id=None, parent=None):
-        super().__init__(parent)
+    def __init__(self, categoria_id=None, parent=None, usuario=None):
+        super().__init__(parent)        
         self.categoria_id = categoria_id
         self.editando = categoria_id is not None
+        # --- seguridad: guard interna ---
+        # Preferimos el usuario explícito pasado; si no vino, intentar obtenerlo del parent (VentanaPrincipal)
+        self.usuario = usuario or getattr(parent, "usuario", None)
+
+        # Si no tiene permiso: require_perm_or_close mostrará mensaje y cerrará/rechazará el diálogo.
+        # IMPORTANTE: si devuelve False debemos salir del __init__ para no inicializar el resto del diálogo.
+        if not require_perm_or_close(self, self.usuario, "0200", "crear_categoria"):
+            return
         
         # Variables para comunicar el resultado al padre
         self.create_new_product_flag = False

@@ -24,11 +24,11 @@ from gui.form_listado_ventas import FormVentas
 from gui.form_cobro import FormCobro
 from gui.dialog_tasas import DialogTasas
 from gui.form_listado_productos import FormListadoProductos
-from gui.form_gestion_personal import FormGestionPersonal
+from gui.form_listado_personal import FormListadoPersonal
 from gui.form_listado_usuarios import FormListadoUsuarios
 from gui.form_mi_perfil import FormMiPerfil
 from gui.change_password_dialog import ChangePasswordDialog
-from gui.recovery_dialog import RecoveryDialog
+from gui.form_recuperar_acceso import FormRecuperarAcceso
 from gui.lock_screen import LockScreenDialog
 from models import Personal
 from zoneinfo import ZoneInfo
@@ -747,8 +747,8 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(formulario, "Gestión de Ventas")
 
     def abrir_form_categoria(self):
-        # Abrir como QDialog modal (NO usar mostrar_formulario acá)
-        dlg = FormCategoria(parent=self)
+        # pasar explicitamente el usuario actual al diálogo para que la guard funcione
+        dlg = FormCategoria(parent=self, usuario=self.usuario)
         print("DEBUG: Abriendo FormCategoria (menú Productos > Categorías)")
         result = dlg.exec()
         print(f"DEBUG: Cerró FormCategoria. result={result} | flag={dlg.create_new_product_flag} | cat_id={dlg.newly_created_category_id}")
@@ -757,7 +757,7 @@ class VentanaPrincipal(QMainWindow):
             # Si el usuario eligió "+Producto", abrir FormProducto con la categoría preseleccionada
             cat_id = dlg.newly_created_category_id
             print(f"DEBUG: Abrir FormProducto con categoría preseleccionada (cat_id={cat_id})")
-            prod = FormProducto(parent=self)
+            prod = FormProducto(parent=self, usuario=self.usuario)
             # Asegurar combo cargado y preseleccionar
             prod.cargar_categorias()
             idx = prod.categoria_combo.findData(cat_id)
@@ -773,19 +773,19 @@ class VentanaPrincipal(QMainWindow):
     def abrir_form_producto(self):
         # También como QDialog modal para ser consistente
         print("DEBUG: Abriendo FormProducto (menú Productos > Productos)")
-        dlg = FormProducto(parent=self)
+        dlg = FormProducto(parent=self, usuario=self.usuario)
         dlg.exec()
         # Tras cerrar, refrescar el listado del panel central
         self.abrir_listado_productos()
 
     def abrir_form_personal(self):
-        self.mostrar_formulario(FormPersonal(), "Gestión de Personal")
+        self.mostrar_formulario(FormPersonal(usuario=self.usuario), "Gestión de Personal")
 
     def abrir_form_usuario(self):
-        self.mostrar_formulario(FormUsuario(), "Gestión de Usuarios")
+        self.mostrar_formulario(FormUsuario(usuario=self.usuario), "Gestión de Usuarios")
 
     def abrir_form_permisos(self):
-        self.mostrar_formulario(FormPermisos(), "Gestión de Permisos")
+        self.mostrar_formulario(FormPermisos(usuario=self.usuario), "Gestión de Permisos")
 
     def abrir_form_consultas(self):
         self.mostrar_formulario(FormConsultas(), "Consultas Generales")
@@ -843,19 +843,19 @@ class VentanaPrincipal(QMainWindow):
         from PySide6.QtWidgets import QApplication  
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            self.mostrar_formulario(FormListadoProductos(), "Listado de Categorías y Productos")
+            self.mostrar_formulario(FormListadoProductos(usuario=self.usuario), "Listado de Categorías y Productos")
         finally:
             QApplication.restoreOverrideCursor()
 
     def abrir_gestion_personal(self):
-        self.mostrar_formulario(FormGestionPersonal(), "Listado de Personal")
+        self.mostrar_formulario(FormListadoPersonal(usuario=self.usuario), "Listado de Personal")
 
     def abrir_listado_usuarios(self):
-        self.mostrar_formulario(FormListadoUsuarios(), "Listado de Usuarios")
+        formulario = FormListadoUsuarios(usuario=self.usuario)
+        self.mostrar_formulario(formulario, "Listado de Usuarios")
 
     def abrir_recuperar_acceso(self):
-        dlg = RecoveryDialog(self, self.usuario)
-        dlg.exec()
+        self.mostrar_formulario(FormRecuperarAcceso(usuario=self.usuario), "Recuperar Acceso")
 
     # ---------- Inicio ----------
     def mostrar_formulario_inicio(self):

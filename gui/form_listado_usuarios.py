@@ -8,8 +8,27 @@ from models import Usuario, Personal, Rol
 from gui.form_usuario import FormUsuario
 
 class FormListadoUsuarios(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
+        self.usuario = usuario
+        # --- GUARDIA DE ACCESO ---
+        if self.usuario is None:
+            QMessageBox.warning(self, "Acceso denegado", "No hay usuario autenticado.")
+            self.close()
+            return
+
+        rol = getattr(self.usuario, "rol", None)
+        nombre_rol = getattr(rol, "nombre", "").lower() if rol else ""
+
+        # Misma regla que en FormUsuario
+        permisos_autorizados = ["owner", "administrador", "gerente"]
+
+        if nombre_rol not in permisos_autorizados:
+            QMessageBox.warning(self, "Acceso denegado",
+                                "No tenés permisos para acceder a la gestión de usuarios.")
+            self.close()
+            return
+
         self.setWindowTitle("Listado de Usuarios")
         self.setMinimumSize(900, 500)
 
@@ -175,7 +194,7 @@ class FormListadoUsuarios(QWidget):
             self.btn_estado.setText("Activar/Desactivar")
 
     def abrir_form_usuario(self, personal_id=None):
-        self.form = FormUsuario()
+        self.form = FormUsuario(usuario=self.usuario)
         if personal_id:
             index = self.form.personal_combo.findData(personal_id)
             if index != -1:

@@ -6,13 +6,22 @@ from PySide6.QtCore import Qt
 from database import session
 from models import Producto, Categoria
 from sqlalchemy.exc import IntegrityError
-
+from utils.guards import require_perm_or_close
+from utils.permisos import tiene_permiso_match
 
 class FormProducto(QDialog):  # ...
-    def __init__(self, producto_id=None, parent=None):
+    def __init__(self, producto_id=None, parent=None, usuario=None):
         super().__init__(parent)
         self.producto_id = producto_id
         self.editando = producto_id is not None
+        # --- seguridad: guard interna ---
+        self.usuario = usuario or getattr(parent, "usuario", None)
+
+        # Elegimos tokens según si estamos editando o creando para dar mensajes más precisos
+        tokens = ("0220", "editar_producto") if self.editando else ("0210", "crear_producto")
+        if not require_perm_or_close(self, self.usuario, *tokens):
+            return
+        # --- fin guard ---
         
         # Configuración de la ventana
         self.setWindowTitle("Gestión de Producto" if not self.editando else "Editar Producto")
@@ -310,6 +319,15 @@ class FormProducto(QDialog):  # ...
         """Guarda o actualiza el producto."""
         nombre = self.nombre_input.text().strip()
         categoria_id = self.categoria_combo.currentData()
+        # Permiso para crear/editar producto (defensa en profundidad)
+        if self.editando:
+            if not tiene_permiso_match(self.usuario, "0220", "editar_producto"):
+                QMessageBox.warning(self, "Acceso denegado", "No tenés permiso para editar productos.")
+                return
+        else:
+            if not tiene_permiso_match(self.usuario, "0210", "crear_producto"):
+                QMessageBox.warning(self, "Acceso denegado", "No tenés permiso para crear productos.")
+                return
         
         # Validación visual y lógica
         if not nombre:
@@ -371,6 +389,11 @@ class FormProducto(QDialog):  # ...
             self.reject() # Cerrar con reject en caso de error
 
     def eliminar_producto(self):
+        # Permiso para eliminar producto
+        if not tiene_permiso_match(self.usuario, "0220", "eliminar_producto"):
+            QMessageBox.warning(self, "Acceso denegado", "No tenés permiso para eliminar productos.")
+            return
+
         """Elimina el producto después de confirmación."""
         confirm = QMessageBox.question(self, "Eliminar", "¿Eliminar este producto?", QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:

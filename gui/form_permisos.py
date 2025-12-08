@@ -80,8 +80,26 @@ PLANTILLAS = {
 }
 
 class FormPermisos(QWidget):
-    def __init__(self):
+    def __init__(self, usuario=None):
         super().__init__()
+
+        # ------------- GUARDA INTERNA DE ACCESO -------------
+        from utils.permisos import es_admin, tiene_permiso
+        if usuario is None:
+            QMessageBox.critical(self, "Acceso denegado", "Usuario no autenticado.")
+            self.close()
+            return
+
+        # Sólo admins o quien tenga permiso explícito
+        if not (es_admin(usuario) or tiene_permiso(usuario, "0360 (otorgar) permisos")):
+            QMessageBox.critical(
+                self, "Acceso denegado",
+                "No tenés permisos para acceder a esta pantalla."
+            )
+            self.close()
+            return
+        # -----------------------------------------------------
+
         self.setWindowTitle("Gestión de Permisos")
         self.setMinimumSize(980, 680)
         self.setStyleSheet(self.estilo_general())
