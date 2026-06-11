@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-from database import session
+from database import get_session
 from models import Categoria, Producto
 from utils.guards import require_perm_or_close
 
@@ -280,12 +280,13 @@ class FormCategoria(QDialog):
     def cargar_datos(self):
         """Carga los datos de la categoría para edición"""
         try:
-            categoria = session.get(Categoria, self.categoria_id)
-            if categoria:
-                self.nombre_input.setText(categoria.nombre)
-            else:
-                QMessageBox.warning(self, "Error", "Categoría no encontrada")
-                self.reject() 
+            with get_session() as session:
+                categoria = session.get(Categoria, self.categoria_id)
+                if categoria:
+                    self.nombre_input.setText(categoria.nombre)
+                else:
+                    QMessageBox.warning(self, "Error", "Categoría no encontrada")
+                    self.reject()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al cargar datos:\n{str(e)}")
             self.reject()
@@ -314,31 +315,32 @@ class FormCategoria(QDialog):
         self.nombre_input.setStyleSheet("")
         
         try:
-            if self.editando:
-                # Actualizar categoría existente
-                categoria = session.get(Categoria, self.categoria_id)
-                if categoria:
-                    categoria.nombre = nombre
-                    mensaje_exito = "Categoría actualizada correctamente"
+            with get_session() as session:
+                if self.editando:
+                    # Actualizar categoría existente
+                    categoria = session.get(Categoria, self.categoria_id)
+                    if categoria:
+                        categoria.nombre = nombre
+                        mensaje_exito = "Categoría actualizada correctamente"
+                    else:
+                        QMessageBox.warning(self, "Error", "Categoría no encontrada")
+                        return
                 else:
-                    QMessageBox.warning(self, "Error", "Categoría no encontrada")
-                    return
-            else:
-                # Crear nueva categoría
-                categoria_existente = session.query(Categoria).filter_by(nombre=nombre).first()
-                if categoria_existente:
-                    QMessageBox.warning(self, "Categoría duplicada", 
-                                  f"Ya existe una categoría con el nombre '{nombre}'")
-                    return
-                
-                categoria = Categoria(nombre=nombre)
-                session.add(categoria)
-                session.flush() # Obtener el ID antes del commit final
-                self.newly_created_category_id = categoria.id 
-                mensaje_exito = "Categoría creada correctamente"            
+                    # Crear nueva categoría
+                    categoria_existente = session.query(Categoria).filter_by(nombre=nombre).first()
+                    if categoria_existente:
+                        QMessageBox.warning(self, "Categoría duplicada",
+                                      f"Ya existe una categoría con el nombre '{nombre}'")
+                        return
 
-            session.commit()
-            print(f"DEBUG: Categoría guardada. ID de la nueva categoría: {self.newly_created_category_id}") # AÑADE ESTA LÍNEA
+                    categoria = Categoria(nombre=nombre)
+                    session.add(categoria)
+                    session.flush()  # Obtener el ID antes del commit final
+                    self.newly_created_category_id = categoria.id
+                    mensaje_exito = "Categoría creada correctamente"
+
+                session.commit()
+            print(f"DEBUG: Categoría guardada. ID de la nueva categoría: {self.newly_created_category_id}")
             
             # Mostrar mensaje de éxito
             info_box = QMessageBox(self)
@@ -383,49 +385,48 @@ class FormCategoria(QDialog):
                 self.accept()
                 
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar la categoría:\n{str(e)}")
-            self.reject() 
+            self.reject()
 
     def eliminar_categoria(self):
         """Elimina la categoría si no tiene productos asociados."""
         try:
-            categoria = session.get(Categoria, self.categoria_id)
-            if not categoria:
-                QMessageBox.warning(self, "Error", "Categoría no encontrada")
-                self.reject()
-                return
+            with get_session() as session:
+                categoria = session.get(Categoria, self.categoria_id)
+                if not categoria:
+                    QMessageBox.warning(self, "Error", "Categoría no encontrada")
+                    self.reject()
+                    return
 
-            productos_count = session.query(Producto).filter_by(categoria_id=self.categoria_id).count()
-            if productos_count > 0:
-                print(f"DEBUG: Intento de eliminar categoría con {productos_count} producto(s)")
-                QMessageBox.information(
+                productos_count = session.query(Producto).filter_by(categoria_id=self.categoria_id).count()
+                if productos_count > 0:
+                    print(f"DEBUG: Intento de eliminar categoría con {productos_count} producto(s)")
+                    QMessageBox.information(
+                        self,
+                        "No se puede eliminar",
+                        f"Esta categoría tiene {productos_count} producto(s) asociado(s).\n"
+                        "Primero eliminá o reasigná esos productos."
+                    )
+                    return
+
+                nombre_cat = categoria.nombre
+                confirm = QMessageBox.question(
                     self,
-                    "No se puede eliminar",
-                    f"Esta categoría tiene {productos_count} producto(s) asociado(s).\n"
-                    "Primero eliminá o reasigná esos productos."
+                    "Confirmar eliminación",
+                    f"¿Estás seguro de eliminar la categoría '{nombre_cat}'?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
                 )
-                return
-
-            confirm = QMessageBox.question(
-                self,
-                "Confirmar eliminación",
-                f"¿Estás seguro de eliminar la categoría '{categoria.nombre}'?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if confirm == QMessageBox.Yes:
-                session.delete(categoria)
-                session.commit()
-                print("DEBUG: Categoría eliminada OK")
-                QMessageBox.information(self, "Éxito", "Categoría eliminada correctamente")
-                self.accept()
-            else:
-                print("DEBUG: Usuario canceló eliminación de categoría")
-                return
+                if confirm == QMessageBox.Yes:
+                    session.delete(categoria)
+                    session.commit()
+                    print("DEBUG: Categoría eliminada OK")
+                    QMessageBox.information(self, "Éxito", "Categoría eliminada correctamente")
+                    self.accept()
+                else:
+                    print("DEBUG: Usuario canceló eliminación de categoría")
 
         except Exception as e:
-            session.rollback()
             print(f"DEBUG: Error inesperado al eliminar categoría: {e}")
             QMessageBox.critical(self, "Error", f"No se pudo eliminar la categoría:\n{str(e)}")
             self.reject()

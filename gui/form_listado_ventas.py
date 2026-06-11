@@ -5,8 +5,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 
-from database import session
+from database import get_session
 from models import Venta, Cobro, Cliente
+from sqlalchemy.orm import joinedload
 from gui.form_venta import FormVenta
 from utils.generador_contrato import generar_contrato_word, generar_contrato_excel
 from utils.generador_pagare import generar_pagare_word, generar_pagare_excel
@@ -95,7 +96,18 @@ class FormVentas(QWidget):
     # ---------- datos ----------
 
     def cargar_datos(self):
-        self.todas_las_ventas = session.query(Venta).all()
+        with get_session() as session:
+            self.todas_las_ventas = (
+                session.query(Venta)
+                .options(
+                    joinedload(Venta.cliente),
+                    joinedload(Venta.cuotas),
+                    joinedload(Venta.coordinador),
+                    joinedload(Venta.vendedor),
+                    joinedload(Venta.cobrador),
+                )
+                .all()
+            )
         self.mostrar_ventas(self.todas_las_ventas)
 
     def mostrar_ventas(self, lista):
@@ -182,68 +194,83 @@ class FormVentas(QWidget):
     # ---------- acciones ----------
 
     def ver_detalle_venta(self, venta_id):
-        v = session.query(Venta).get(venta_id)
-        if not v:
-            QMessageBox.warning(self, "Error", "Venta no encontrada.")
-            return
+        with get_session() as session:
+            v = (
+                session.query(Venta)
+                .options(
+                    joinedload(Venta.cliente),
+                    joinedload(Venta.garante),
+                    joinedload(Venta.producto),
+                    joinedload(Venta.coordinador),
+                    joinedload(Venta.vendedor),
+                    joinedload(Venta.cobrador),
+                    joinedload(Venta.creada_por),
+                )
+                .filter_by(id=venta_id)
+                .first()
+            )
+            if not v:
+                QMessageBox.warning(self, "Error", "Venta no encontrada.")
+                return
 
-        cliente = v.cliente
-        garante = v.garante
-        producto = v.producto
+            cliente = v.cliente
+            garante = v.garante
+            producto = v.producto
 
-        # Cabecera
-        msg_parts = []
-        msg_parts.append(f"<b>ID:</b> {v.id}")
-        msg_parts.append(f"<b>Fecha:</b> {v.fecha.strftime('%d/%m/%Y') if v.fecha else ''}")
-        if cliente:
-            msg_parts.append(f"<b>Cliente:</b> {cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})")
-            if v.finalizada and cliente.calificacion:
-                msg_parts.append(f"<b>Calificación Cliente:</b> {cliente.calificacion}")
+            msg_parts = []
+            msg_parts.append(f"<b>ID:</b> {v.id}")
+            msg_parts.append(f"<b>Fecha:</b> {v.fecha.strftime('%d/%m/%Y') if v.fecha else ''}")
+            if cliente:
+                msg_parts.append(f"<b>Cliente:</b> {cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})")
+                if v.finalizada and cliente.calificacion:
+                    msg_parts.append(f"<b>Calificación Cliente:</b> {cliente.calificacion}")
 
-        if garante:
-            fila_garante = f"<b>Garante:</b> {garante.apellidos}, {garante.nombres} (DNI {garante.dni})"
-            if v.finalizada and garante.calificacion:
-                fila_garante += f"<br><b>Calificación Garante:</b> {garante.calificacion}"
-            msg_parts.append(fila_garante)
+            if garante:
+                fila_garante = f"<b>Garante:</b> {garante.apellidos}, {garante.nombres} (DNI {garante.dni})"
+                if v.finalizada and garante.calificacion:
+                    fila_garante += f"<br><b>Calificación Garante:</b> {garante.calificacion}"
+                msg_parts.append(fila_garante)
 
-        msg_parts.append(f"<b>Producto:</b> {producto.nombre if producto else ''}")
-        msg_parts.append(f"<b>Plan de Pago:</b> {v.plan_pago.capitalize() if v.plan_pago else ''}")
-        msg_parts.append(f"<b>Monto:</b> ${v.monto:,.2f}")
-        msg_parts.append(f"<b>Cuotas:</b> {v.num_cuotas} x ${v.valor_cuota:,.2f}")
-        msg_parts.append(
-            f"<b>Personal:</b> Coordinador: {v.coordinador.nombres if v.coordinador else ''} / "
-            f"Vendedor: {v.vendedor.nombres if v.vendedor else ''} / "
-            f"Cobrador: {v.cobrador.nombres if v.cobrador else ''}"
-        )
+            msg_parts.append(f"<b>Producto:</b> {producto.nombre if producto else ''}")
+            msg_parts.append(f"<b>Plan de Pago:</b> {v.plan_pago.capitalize() if v.plan_pago else ''}")
+            msg_parts.append(f"<b>Monto:</b> ${v.monto:,.2f}")
+            msg_parts.append(f"<b>Cuotas:</b> {v.num_cuotas} x ${v.valor_cuota:,.2f}")
+            msg_parts.append(
+                f"<b>Personal:</b> Coordinador: {v.coordinador.nombres if v.coordinador else ''} / "
+                f"Vendedor: {v.vendedor.nombres if v.vendedor else ''} / "
+                f"Cobrador: {v.cobrador.nombres if v.cobrador else ''}"
+            )
 
-        # --- Trazabilidad ---
-        if v.creada_por:
-            msg_parts.append(f"<b>Creada por:</b> {v.creada_por.nombre}")
+            if v.creada_por:
+                msg_parts.append(f"<b>Creada por:</b> {v.creada_por.nombre}")
 
-        ultimo_cobro = (
-            session.query(Cobro)
-            .filter_by(venta_id=v.id)
-            .order_by(desc(Cobro.id))
-            .first()
-        )
-        if ultimo_cobro and ultimo_cobro.registrado_por:
-            msg_parts.append(f"<b>Último cobro cargado por:</b> {ultimo_cobro.registrado_por.nombre}")
+            ultimo_cobro = (
+                session.query(Cobro)
+                .filter_by(venta_id=v.id)
+                .order_by(desc(Cobro.id))
+                .first()
+            )
+            if ultimo_cobro and ultimo_cobro.registrado_por:
+                msg_parts.append(f"<b>Último cobro cargado por:</b> {ultimo_cobro.registrado_por.nombre}")
 
-        # Estado
-        estado = "Anulada" if v.anulada else ("Finalizada" if v.finalizada else "Activa")
-        msg_parts.append(f"<b>Estado:</b> {estado}")
+            estado = "Anulada" if v.anulada else ("Finalizada" if v.finalizada else "Activa")
+            msg_parts.append(f"<b>Estado:</b> {estado}")
 
         QMessageBox.information(self, "Detalle de Venta", "<br>".join(msg_parts))
 
     def editar_venta(self, venta_id):
-        venta = session.query(Venta).get(venta_id)
-        if not venta:
-            QMessageBox.warning(self, "Error", "Venta no encontrada.")
-            return
-        if venta.anulada:
+        with get_session() as session:
+            venta = session.query(Venta).get(venta_id)
+            if not venta:
+                QMessageBox.warning(self, "Error", "Venta no encontrada.")
+                return
+            anulada = venta.anulada
+            finalizada = venta.finalizada
+
+        if anulada:
             QMessageBox.warning(self, "No editable", "No se puede editar una venta anulada.")
             return
-        if venta.finalizada:
+        if finalizada:
             if QMessageBox.question(
                 self, "Edición limitada",
                 "Solo podés cambiar calificaciones. ¿Continuar?",
@@ -265,7 +292,21 @@ class FormVentas(QWidget):
         self.form.closeEvent = self._refrescar_al_cerrar
 
     def abrir_documentos_venta(self, venta_id):
-        venta = session.query(Venta).get(venta_id)
+        with get_session() as session:
+            venta = (
+                session.query(Venta)
+                .options(
+                    joinedload(Venta.cliente),
+                    joinedload(Venta.garante),
+                    joinedload(Venta.producto),
+                    joinedload(Venta.coordinador),
+                    joinedload(Venta.vendedor),
+                    joinedload(Venta.cobrador),
+                    joinedload(Venta.cuotas),
+                )
+                .filter_by(id=venta_id)
+                .first()
+            )
         if not venta:
             QMessageBox.warning(self, "Error", "Venta no encontrada.")
             return
@@ -344,10 +385,11 @@ class FormVentas(QWidget):
         self.form = FormCobro(venta_id=venta_id, usuario_actual=usuario)
 
         # Título con datos del cliente (si existen)
-        venta = session.query(Venta).get(venta_id)
-        if venta and venta.cliente:
-            c = venta.cliente
-            self.form.setWindowTitle(f"Gestión de Cobros – Venta #{venta.id} – {c.apellidos}, {c.nombres}")
+        with get_session() as session:
+            venta = session.query(Venta).get(venta_id)
+            if venta and venta.cliente:
+                c = venta.cliente
+                self.form.setWindowTitle(f"Gestión de Cobros – Venta #{venta.id} – {c.apellidos}, {c.nombres}")
 
         # 🔗 Conectar señales para refrescar listado automáticamente
         def _refrescar(_venta_id=None):

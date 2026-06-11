@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout, QMessageBox, QLabel, QHeaderView
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Personal
 from gui.form_personal import FormPersonal
 from utils.permisos import tiene_permiso, es_admin
@@ -77,7 +77,8 @@ class FormListadoPersonal(QWidget):
 
     def actualizar_tabla(self):
         texto = self.buscador.text().lower()
-        personales = session.query(Personal).all()
+        with get_session() as session:
+            personales = session.query(Personal).all()
 
         filtrados = [
             p for p in personales if
@@ -147,11 +148,12 @@ class FormListadoPersonal(QWidget):
         )
         if confirmacion == QMessageBox.Yes:
             try:
-                persona = session.query(Personal).get(personal_id)
-                session.delete(persona)
-                session.commit()
+                with get_session() as session:
+                    persona = session.get(Personal, personal_id)
+                    if persona:
+                        session.delete(persona)
+                        session.commit()
                 self.actualizar_tabla()
                 QMessageBox.information(self, "Eliminado", "Personal eliminado correctamente.")
             except Exception as e:
-                session.rollback()
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar:\n{e}")

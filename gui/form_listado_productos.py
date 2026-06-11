@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QFrame, QMessageBox, QScrollArea, QSizePolicy, QDialog
 )
 from PySide6.QtCore import Qt, QSize, QTimer
-from database import session
+from database import get_session
 from models import Categoria, Producto
 from gui.form_categoria import FormCategoria
 from gui.form_producto import FormProducto
@@ -184,8 +184,17 @@ class FormListadoProductos(QWidget):
             elif child.layout():
                 self.clear_layout(child.layout())
         
-        categorias = session.query(Categoria).all()
-        
+        try:
+            with get_session() as session:
+                categorias = session.query(Categoria).all()
+                productos_por_cat = {
+                    cat.id: session.query(Producto).filter_by(categoria_id=cat.id).all()
+                    for cat in categorias
+                }
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo cargar el listado:\n{e}")
+            return
+
         if not categorias:
             # Mostrar mensaje cuando no hay categorías
             frame_vacio = QFrame()
@@ -265,7 +274,7 @@ class FormListadoProductos(QWidget):
             frame_layout.addWidget(linea)
             
             # Productos de la categoría
-            productos = session.query(Producto).filter_by(categoria_id=cat.id).all()
+            productos = productos_por_cat.get(cat.id, [])
             
             if productos:
                 # Título de sección de productos
@@ -474,14 +483,15 @@ class FormListadoProductos(QWidget):
     def eliminar_categoria(self, categoria_id):
         """Elimina una categoría después de confirmación (si no tiene productos)."""
         try:
-            cat = session.get(Categoria, categoria_id)
-            if not cat:
-                QMessageBox.warning(self, "Error", "Categoría no encontrada")
-                return
+            with get_session() as session:
+                cat = session.get(Categoria, categoria_id)
+                if not cat:
+                    QMessageBox.warning(self, "Error", "Categoría no encontrada")
+                    return
+                cat_nombre = cat.nombre
+                productos_count = session.query(Producto).filter_by(categoria_id=categoria_id).count()
 
-            productos_count = session.query(Producto).filter_by(categoria_id=categoria_id).count()
             if productos_count > 0:
-                print(f"DEBUG: Intento de eliminar categoría con {productos_count} producto(s)")
                 QMessageBox.information(
                     self,
                     "No se puede eliminar",
@@ -493,50 +503,53 @@ class FormListadoProductos(QWidget):
             confirm = QMessageBox.question(
                 self,
                 "Confirmar eliminación",
-                f"¿Estás seguro de eliminar la categoría '{cat.nombre}'?",
+                f"¿Estás seguro de eliminar la categoría '{cat_nombre}'?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
-            if confirm == QMessageBox.Yes:
-                session.delete(cat)
-                session.commit()
-                print("DEBUG: Categoría eliminada desde listado OK")
-                QMessageBox.information(self, "Éxito", "Categoría eliminada correctamente")
-                self.cargar_listado()
-            else:
-                print("DEBUG: Usuario canceló eliminación de categoría")
+            if confirm != QMessageBox.Yes:
+                return
+
+            with get_session() as session:
+                cat = session.get(Categoria, categoria_id)
+                if cat:
+                    session.delete(cat)
+                    session.commit()
+            QMessageBox.information(self, "Éxito", "Categoría eliminada correctamente")
+            self.cargar_listado()
 
         except Exception as e:
-            session.rollback()
-            print(f"DEBUG: Error inesperado al eliminar categoría desde listado: {e}")
             QMessageBox.critical(self, "Error", f"No se pudo eliminar la categoría:\n{str(e)}")
 
     def eliminar_producto(self, producto_id):
         """Elimina un producto después de confirmación"""
         try:
-            prod = session.get(Producto, producto_id)
-            if not prod:
-                QMessageBox.warning(self, "Error", "Producto no encontrado")
-                return
+            with get_session() as session:
+                prod = session.get(Producto, producto_id)
+                if not prod:
+                    QMessageBox.warning(self, "Error", "Producto no encontrado")
+                    return
+                prod_nombre = prod.nombre
 
             confirm = QMessageBox.question(
                 self,
                 "Confirmar eliminación",
-                f"¿Estás seguro de eliminar el producto '{prod.nombre}'?",
+                f"¿Estás seguro de eliminar el producto '{prod_nombre}'?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
+            if confirm != QMessageBox.Yes:
+                return
 
-            if confirm == QMessageBox.Yes:
-                session.delete(prod)
-                session.commit()
-                print("DEBUG: Producto eliminado desde listado OK")
-                QMessageBox.information(self, "Éxito", "Producto eliminado correctamente")
-                self.cargar_listado()
+            with get_session() as session:
+                prod = session.get(Producto, producto_id)
+                if prod:
+                    session.delete(prod)
+                    session.commit()
+            QMessageBox.information(self, "Éxito", "Producto eliminado correctamente")
+            self.cargar_listado()
 
         except IntegrityError:
-            session.rollback()
-            print("DEBUG: IntegrityError al eliminar producto desde listado (tiene ventas)")
             QMessageBox.warning(
                 self,
                 "No se puede eliminar",
@@ -544,6 +557,4 @@ class FormListadoProductos(QWidget):
             )
 
         except Exception as e:
-            session.rollback()
-            print(f"DEBUG: Error inesperado al eliminar producto desde listado: {e}")
             QMessageBox.critical(self, "Error", f"No se pudo eliminar el producto:\n{str(e)}")

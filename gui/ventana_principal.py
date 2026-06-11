@@ -1036,8 +1036,9 @@ class VentanaPrincipal(QMainWindow):
 
         if not per and getattr(self.usuario, "personal_id", None):
             try:
-                from database import session
-                per = session.get(Personal, self.usuario.personal_id)
+                from database import get_session
+                with get_session() as _s:
+                    per = _s.get(Personal, self.usuario.personal_id)
             except Exception:
                 per = None
 
@@ -1062,7 +1063,7 @@ class VentanaPrincipal(QMainWindow):
     def desactivar_2fa(self):
         """Apaga el 2FA del usuario actual desde el menú de perfil."""
         from PySide6.QtWidgets import QMessageBox
-        from database import session
+        from database import get_session
         ok = QMessageBox.question(
             self, "Desactivar ingreso con token",
             "¿Seguro que querés desactivar el ingreso con token (2FA) para tu cuenta?",
@@ -1071,9 +1072,13 @@ class VentanaPrincipal(QMainWindow):
         if ok != QMessageBox.Yes:
             return
         try:
+            with get_session() as _s:
+                u = _s.get(type(self.usuario), self.usuario.id)
+                u.totp_enabled = False
+                u.totp_secret = None
+                _s.commit()
             self.usuario.totp_enabled = False
             self.usuario.totp_secret = None
-            session.commit()
             QMessageBox.information(self, "Listo", "Se desactivó el ingreso con token.")
             self.btn_user.setMenu(self._build_profile_menu())
             self._refresh_user_badge()

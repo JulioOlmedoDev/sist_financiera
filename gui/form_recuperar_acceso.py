@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QComboBox, QGroupBox
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Usuario, Personal
 from utils.permisos import tiene_permiso, es_admin
 from datetime import datetime
@@ -109,41 +109,47 @@ class FormRecuperarAcceso(QWidget):
     # =======================================================
     def cargar_personal(self):
         self.combo.clear()
-        lista = session.query(Personal).order_by(Personal.apellidos).all()
+        with get_session() as session:
+            lista = session.query(Personal).order_by(Personal.apellidos).all()
+            for p in lista:
+                nombre = f"{p.apellidos}, {p.nombres}"
+                self.combo.addItem(nombre, p.id)
 
-        for p in lista:
-            nombre = f"{p.apellidos}, {p.nombres}"
-            self.combo.addItem(nombre, p.id)
-
-    def get_usuario_asociado(self):
-        """Devuelve el Usuario vinculado al Personal seleccionado."""
-        pid = self.combo.currentData()
-        if not pid:
-            return None
-        return session.query(Usuario).filter_by(personal_id=pid).first()
+    def _get_personal_id(self):
+        """Devuelve el ID del Personal seleccionado en el combo."""
+        return self.combo.currentData()
 
     # =======================================================
     # Cargar información
     # =======================================================
     def cargar_info_usuario(self):
-        user = self.get_usuario_asociado()
-
-        if not user:
+        pid = self._get_personal_id()
+        if not pid:
             self.lbl_username.setText("Nombre de usuario: —")
             self.lbl_token.setText("Token habilitado: —")
-            self.lbl_estado.setText("<span style='color:red;'>Este empleado no tiene usuario asignado.</span>")
+            self.lbl_estado.setText("")
             return
 
+        with get_session() as session:
+            user = session.query(Usuario).filter_by(personal_id=pid).first()
+            if not user:
+                self.lbl_username.setText("Nombre de usuario: —")
+                self.lbl_token.setText("Token habilitado: —")
+                self.lbl_estado.setText("<span style='color:red;'>Este empleado no tiene usuario asignado.</span>")
+                return
+            nombre = user.nombre
+            totp_enabled = user.totp_enabled
+
         self.lbl_estado.setText("")
-        self.lbl_username.setText(f"Nombre de usuario:  {user.nombre}")
-        self.lbl_token.setText(f"Token habilitado:  {'Sí' if user.totp_enabled else 'No'}")
+        self.lbl_username.setText(f"Nombre de usuario:  {nombre}")
+        self.lbl_token.setText(f"Token habilitado:  {'Sí' if totp_enabled else 'No'}")
 
     # =======================================================
     # Blanqueo de contraseña
     # =======================================================
     def blanquear_password(self):
-        user = self.get_usuario_asociado()
-        if not user:
+        pid = self._get_personal_id()
+        if not pid:
             QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
             return
 
@@ -152,43 +158,60 @@ class FormRecuperarAcceso(QWidget):
             QMessageBox.warning(self, "Dato requerido", "Debe ingresar una nueva contraseña temporal.")
             return
 
-        user.password = hashlib.sha256(nueva.encode()).hexdigest()
-        user.must_change_password = True
-        user.last_password_change = datetime.now()
-        session.commit()
+        try:
+            with get_session() as session:
+                user = session.query(Usuario).filter_by(personal_id=pid).first()
+                if not user:
+                    QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
+                    return
+                user.password = hashlib.sha256(nueva.encode()).hexdigest()
+                user.must_change_password = True
+                user.last_password_change = datetime.now()
+                session.commit()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+            return
 
         QMessageBox.information(
             self, "Contraseña actualizada",
             "La nueva contraseña temporal fue aplicada.\n"
             "El usuario deberá cambiarla al ingresar."
         )
-
         self.txt_nueva_pass.clear()
 
     # =======================================================
     # Token ON/OFF
     # =======================================================
     def toggle_totp(self):
-        user = self.get_usuario_asociado()
-        if not user:
+        pid = self._get_personal_id()
+        if not pid:
             QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
             return
 
-        if user.totp_enabled:
-            user.totp_enabled = False
-            session.commit()
-            QMessageBox.information(self, "Token deshabilitado", "El token fue desactivado temporalmente.")
-        else:
-            if not user.totp_secret:
-                QMessageBox.warning(
-                    self,
-                    "No disponible",
-                    "Este usuario nunca configuró su token.\nDebe activarlo desde su propio perfil."
-                )
-                return
+        try:
+            with get_session() as session:
+                user = session.query(Usuario).filter_by(personal_id=pid).first()
+                if not user:
+                    QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
+                    return
 
-            user.totp_enabled = True
-            session.commit()
-            QMessageBox.information(self, "Token habilitado", "El token fue activado nuevamente.")
+                if user.totp_enabled:
+                    user.totp_enabled = False
+                    session.commit()
+                    QMessageBox.information(self, "Token deshabilitado", "El token fue desactivado temporalmente.")
+                else:
+                    if not user.totp_secret:
+                        QMessageBox.warning(
+                            self,
+                            "No disponible",
+                            "Este usuario nunca configuró su token.\nDebe activarlo desde su propio perfil."
+                        )
+                        return
+                    user.totp_enabled = True
+                    session.commit()
+                    QMessageBox.information(self, "Token habilitado", "El token fue activado nuevamente.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+            return
 
         self.cargar_info_usuario()

@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QPushButton, QHBoxLayout, QMessageBox
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Usuario
 from datetime import datetime
 import os
@@ -55,13 +55,21 @@ class ChangePasswordDialog(QDialog):
             QMessageBox.warning(self, "Contraseña insegura", "No incluyas el nombre de usuario en la contraseña.")
             return
 
-        # Guardar hash
+        # Actualizar atributos en el objeto local
         self.usuario.password = argon2.hash(pwd1 + PEPPER)
         self.usuario.last_password_change = datetime.utcnow()
         self.usuario.must_change_password = False
         self.usuario.failed_attempts = 0
         self.usuario.lock_until = None
 
-        session.commit()
+        # Persistir usando merge para trabajar con el objeto detachado
+        try:
+            with get_session() as session:
+                session.merge(self.usuario)
+                session.commit()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo guardar la contraseña:\n{e}")
+            return
+
         QMessageBox.information(self, "Listo", "Contraseña actualizada.")
         self.accept()

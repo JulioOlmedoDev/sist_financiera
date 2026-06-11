@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QHBoxLayout, QScrollArea, QSizePolicy, QGridLayout
 )
 from PySide6.QtCore import Qt, Signal
-from database import session
+from database import get_session
 from models import Usuario, Personal, Rol
 import hashlib
 
@@ -35,7 +35,7 @@ class FormUsuario(QWidget):
 
         self.setWindowTitle("Gestión de Usuario")
         self.setMinimumSize(800, 400)
-        self.usuario_existente = None
+        self.usuario_existente_id = None  # ID del usuario existente (si aplica)
         self._roles = []  # cache de roles para buscar id/nombre
 
         self.showMaximized()
@@ -153,14 +153,16 @@ class FormUsuario(QWidget):
 
     def cargar_personal(self):
         self.personal_combo.clear()
-        personales = session.query(Personal).all()
-        for p in personales:
-            texto = f"{(p.apellidos or '').strip()}, {(p.nombres or '').strip()} (DNI {p.dni or ''})"
-            self.personal_combo.addItem(texto.strip(), userData=p.id)
+        with get_session() as session:
+            personales = session.query(Personal).all()
+            for p in personales:
+                texto = f"{(p.apellidos or '').strip()}, {(p.nombres or '').strip()} (DNI {p.dni or ''})"
+                self.personal_combo.addItem(texto.strip(), userData=p.id)
 
     def cargar_roles(self):
         """Llena el combo con: (Sin rol), Administrador, Gerente, Coordinador, Administrativo."""
-        self._roles = session.query(Rol).all()
+        with get_session() as session:
+            self._roles = session.query(Rol).all()
         self.rol_combo.clear()
         self.rol_combo.addItem("— Sin rol —", userData=None)
         for r in self._roles:
@@ -175,7 +177,6 @@ class FormUsuario(QWidget):
         if idx != -1:
             self.rol_combo.setCurrentIndex(idx)
         else:
-            # si no está, dejar "Sin rol"
             self.rol_combo.setCurrentIndex(0)
 
     def _rol_id_from_nombre(self, nombre: str):
@@ -191,28 +192,27 @@ class FormUsuario(QWidget):
         if not personal_id:
             return
 
-        usuario = session.query(Usuario).filter_by(personal_id=personal_id).first()
-        self.usuario_existente = usuario
+        with get_session() as session:
+            usuario = session.query(Usuario).filter_by(personal_id=personal_id).first()
+            if usuario:
+                self.usuario_existente_id = usuario.id
+                nombre_existente = usuario.nombre
+                rol_id_existente = usuario.rol_id
+            else:
+                self.usuario_existente_id = None
+                per = session.query(Personal).get(personal_id)
+                tipo = (per.tipo or "").strip().lower() if per else ""
 
-        if usuario:
-            # Usuario existente: precargar datos
-            self.nombre_input.setText(usuario.nombre or "")
+        if self.usuario_existente_id:
+            self.nombre_input.setText(nombre_existente or "")
             self.password_input.clear()
             self.password_input.setPlaceholderText("Dejar vacío para mantener la contraseña actual")
-            # Rol actual
-            rol_id = getattr(usuario, "rol_id", None)
-            self._set_rol_combo_by_id(rol_id)
+            self._set_rol_combo_by_id(rol_id_existente)
         else:
-            # Usuario nuevo: limpiar y proponer rol según Personal.tipo
             self.nombre_input.clear()
             self.password_input.clear()
             self.password_input.setPlaceholderText("Contraseña para nuevo usuario")
-            self._set_rol_combo_by_id(None)
 
-            per = session.query(Personal).get(personal_id)
-            tipo = (per.tipo or "").strip().lower() if per else ""
-
-            # Mapeo de tipo de Personal -> Rol sugerido
             sugerido = None
             if tipo == "gerente":
                 sugerido = "Gerente"
@@ -220,8 +220,6 @@ class FormUsuario(QWidget):
                 sugerido = "Coordinador"
             elif tipo == "administrativo":
                 sugerido = "Administrativo"
-            else:
-                sugerido = None  # Vendedor/Cobrador/u otros: sin rol por defecto
 
             rol_id = self._rol_id_from_nombre(sugerido) if sugerido else None
             self._set_rol_combo_by_id(rol_id)
@@ -232,7 +230,7 @@ class FormUsuario(QWidget):
         nombre = (self.nombre_input.text() or "").strip()
         password = (self.password_input.text() or "").strip()
         personal_id = self.personal_combo.currentData()
-        rol_id = self.rol_combo.currentData()  # puede ser None
+        rol_id = self.rol_combo.currentData()
 
         if not nombre:
             self.mostrar_alerta("nombre de usuario")
@@ -241,46 +239,48 @@ class FormUsuario(QWidget):
             QMessageBox.warning(self, "Campo requerido", "Debés seleccionar un personal.")
             return
 
-        personal = session.query(Personal).get(personal_id)
-        email = personal.email if personal else None
-
         try:
-            if self.usuario_existente:
-                # Update
-                self.usuario_existente.nombre = nombre
-                self.usuario_existente.rol_id = rol_id  # asignar / quitar rol
-                if password:
-                    self.usuario_existente.password = hashlib.sha256(password.encode()).hexdigest()
-                session.commit()
-                QMessageBox.information(self, "Éxito", "Usuario actualizado correctamente.")
-            else:
-                # Create
-                if not password:
-                    self.mostrar_alerta("contraseña")
-                    return
+            with get_session() as session:
+                personal = session.query(Personal).get(personal_id)
+                email = personal.email if personal else None
 
-                if email and session.query(Usuario).filter_by(email=email).first():
-                    QMessageBox.warning(self, "Error", f"Ya existe un usuario con el email {email}.")
-                    return
+                if self.usuario_existente_id:
+                    # Update
+                    usuario = session.query(Usuario).get(self.usuario_existente_id)
+                    usuario.nombre = nombre
+                    usuario.rol_id = rol_id
+                    if password:
+                        usuario.password = hashlib.sha256(password.encode()).hexdigest()
+                    session.commit()
+                    QMessageBox.information(self, "Éxito", "Usuario actualizado correctamente.")
+                else:
+                    # Create
+                    if not password:
+                        self.mostrar_alerta("contraseña")
+                        return
 
-                nuevo = Usuario(
-                    nombre=nombre,
-                    email=email,
-                    password=hashlib.sha256(password.encode()).hexdigest(),
-                    rol_id=rol_id,                # puede ser None
-                    personal_id=personal_id,
-                    activo=True
-                )
-                session.add(nuevo)
-                session.commit()
-                QMessageBox.information(self, "Éxito", "Usuario creado correctamente.")
+                    if email and session.query(Usuario).filter_by(email=email).first():
+                        QMessageBox.warning(self, "Error", f"Ya existe un usuario con el email {email}.")
+                        return
 
-            self.usuario_guardado.emit()
-            self.close()
+                    nuevo = Usuario(
+                        nombre=nombre,
+                        email=email,
+                        password=hashlib.sha256(password.encode()).hexdigest(),
+                        rol_id=rol_id,
+                        personal_id=personal_id,
+                        activo=True
+                    )
+                    session.add(nuevo)
+                    session.commit()
+                    QMessageBox.information(self, "Éxito", "Usuario creado correctamente.")
 
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar el usuario:\n{e}")
+            return
+
+        self.usuario_guardado.emit()
+        self.close()
 
     def mostrar_alerta(self, campo):
         QMessageBox.warning(self, "Campo requerido", f"Por favor completá el campo: {campo.capitalize()}")
@@ -288,4 +288,3 @@ class FormUsuario(QWidget):
             self.nombre_input.setFocus()
         elif campo == "contraseña":
             self.password_input.setFocus()
-

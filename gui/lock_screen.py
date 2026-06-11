@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QHBoxLayout, QPushButton, QMessageBox
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Usuario
 import os, hashlib
 from passlib.hash import argon2
@@ -79,14 +79,15 @@ class LockScreenDialog(QDialog):
         if not plain:
             QMessageBox.warning(self, "Campos vacíos", "Ingresá tu contraseña."); return
 
-        # Refrescá el usuario por las dudas
-        user = session.query(Usuario).get(self.usuario.id)
-        if not user or not user.activo:
-            QMessageBox.critical(self, "Sesión inválida", "Tu usuario no está disponible. Cerrando sesión.")
-            self._quit_app()
-            return
+        with get_session() as session:
+            user = session.query(Usuario).get(self.usuario.id)
+            if not user or not user.activo:
+                QMessageBox.critical(self, "Sesión inválida", "Tu usuario no está disponible. Cerrando sesión.")
+                self._quit_app()
+                return
+            password_ok = _verify_password(plain, user.password)
 
-        if _verify_password(plain, user.password):
+        if password_ok:
             self.accept()
         else:
             QMessageBox.critical(self, "Contraseña incorrecta", "La contraseña no es válida.")
@@ -94,6 +95,6 @@ class LockScreenDialog(QDialog):
             self.input.setFocus()
 
     def _quit_app(self):
-        # Cerrar aplicación completa (podemos cambiar a “volver a login” más adelante)
+        # Cerrar aplicación completa (podemos cambiar a "volver a login" más adelante)
         from PySide6.QtWidgets import QApplication
         QApplication.quit()

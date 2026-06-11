@@ -6,7 +6,7 @@ from PySide6.QtCore import QDate, Qt, QRegularExpression, Signal
 from PySide6.QtGui import QRegularExpressionValidator
 
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
-from database import session
+from database import get_session
 from models import Cliente
 
 class FormCliente(QWidget):
@@ -157,18 +157,19 @@ class FormCliente(QWidget):
             self.cargar_datos()
 
     def cargar_datos(self):
-        cliente = session.query(Cliente).get(self.cliente_id)
-        if not cliente:
-            QMessageBox.warning(self, "Error", "Cliente no encontrado")
-            return
-        for key, widget in self.campos.items():
-            value = getattr(cliente, key, "")
-            if isinstance(widget, QLineEdit):
-                widget.setText(value or "")
-            elif isinstance(widget, ComboBoxSinScroll):
-                widget.setCurrentText(value or "")
-            elif isinstance(widget, DateEditSinScroll):
-                widget.setDate(value or QDate.currentDate())
+        with get_session() as session:
+            cliente = session.query(Cliente).get(self.cliente_id)
+            if not cliente:
+                QMessageBox.warning(self, "Error", "Cliente no encontrado")
+                return
+            for key, widget in self.campos.items():
+                value = getattr(cliente, key, "")
+                if isinstance(widget, QLineEdit):
+                    widget.setText(value or "")
+                elif isinstance(widget, ComboBoxSinScroll):
+                    widget.setCurrentText(value or "")
+                elif isinstance(widget, DateEditSinScroll):
+                    widget.setDate(value or QDate.currentDate())
 
     def guardar_cliente(self):
         campos_requeridos = [
@@ -191,19 +192,20 @@ class FormCliente(QWidget):
                 return self.mostrar_alerta(campo)
 
         try:
-            cliente = session.query(Cliente).get(self.cliente_id) if self.editando else Cliente()
-            for key, widget in self.campos.items():
-                if isinstance(widget, QLineEdit):
-                    setattr(cliente, key, widget.text())
-                elif isinstance(widget, ComboBoxSinScroll):
-                    setattr(cliente, key, widget.currentText())
-                elif isinstance(widget, DateEditSinScroll):
-                    setattr(cliente, key, widget.date().toPython())
+            with get_session() as session:
+                cliente = session.query(Cliente).get(self.cliente_id) if self.editando else Cliente()
+                for key, widget in self.campos.items():
+                    if isinstance(widget, QLineEdit):
+                        setattr(cliente, key, widget.text())
+                    elif isinstance(widget, ComboBoxSinScroll):
+                        setattr(cliente, key, widget.currentText())
+                    elif isinstance(widget, DateEditSinScroll):
+                        setattr(cliente, key, widget.date().toPython())
 
-            if not self.editando:
-                session.add(cliente)
+                if not self.editando:
+                    session.add(cliente)
 
-            session.commit()
+                session.commit()
             QMessageBox.information(self, "Éxito", f"Cliente {'actualizado' if self.editando else 'guardado'} correctamente")
             self.cliente_guardado.emit()
             if self.editando:
@@ -211,20 +213,19 @@ class FormCliente(QWidget):
             else:
                 self.limpiar_formulario()
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar el cliente:\n{e}")
 
     def eliminar_cliente(self):
         confirmacion = QMessageBox.question(self, "Eliminar", "¿Estás seguro de eliminar este cliente?", QMessageBox.Yes | QMessageBox.No)
         if confirmacion == QMessageBox.Yes:
             try:
-                cliente = session.query(Cliente).get(self.cliente_id)
-                session.delete(cliente)
-                session.commit()
+                with get_session() as session:
+                    cliente = session.query(Cliente).get(self.cliente_id)
+                    session.delete(cliente)
+                    session.commit()
                 QMessageBox.information(self, "Eliminado", "Cliente eliminado correctamente")
                 self.close()
             except Exception as e:
-                session.rollback()
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el cliente:\n{e}")
 
     def mostrar_alerta(self, campo):

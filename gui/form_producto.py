@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QComboBox, QMessageBox, QHBoxLayout, QFrame
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Producto, Categoria
 from sqlalchemy.exc import IntegrityError
 from utils.guards import require_perm_or_close
@@ -288,32 +288,32 @@ class FormProducto(QDialog):  # ...
     def cargar_categorias(self):
         """Carga las categorías en el QComboBox."""
         self.categoria_combo.clear()
-        categorias = session.query(Categoria).all()
-        if not categorias:
-            self.categoria_combo.addItem("No hay categorías", userData=None)
-            self.categoria_combo.setEnabled(False)
-            # No mostrar QMessageBox aquí para evitar múltiples popups
-            return
-        
-        self.categoria_combo.setEnabled(True)
-        for c in categorias:
-            self.categoria_combo.addItem(c.nombre, userData=c.id)
+        with get_session() as session:
+            categorias = session.query(Categoria).all()
+            if not categorias:
+                self.categoria_combo.addItem("No hay categorías", userData=None)
+                self.categoria_combo.setEnabled(False)
+                return
+            self.categoria_combo.setEnabled(True)
+            for c in categorias:
+                self.categoria_combo.addItem(c.nombre, userData=c.id)
 
     def cargar_datos(self):
         """Carga los datos del producto para edición."""
         try:
-            producto = session.get(Producto, self.producto_id)
-            if producto:
-                self.nombre_input.setText(producto.nombre)
-                index = self.categoria_combo.findData(producto.categoria_id)
-                if index >= 0:
-                    self.categoria_combo.setCurrentIndex(index)
-            else:
-                QMessageBox.warning(self, "Error", "Producto no encontrado")
-                self.reject() # Cerrar con reject si no se encuentra
+            with get_session() as session:
+                producto = session.get(Producto, self.producto_id)
+                if producto:
+                    self.nombre_input.setText(producto.nombre)
+                    index = self.categoria_combo.findData(producto.categoria_id)
+                    if index >= 0:
+                        self.categoria_combo.setCurrentIndex(index)
+                else:
+                    QMessageBox.warning(self, "Error", "Producto no encontrado")
+                    self.reject()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al cargar datos:\n{str(e)}")
-            self.reject() # Cerrar con reject en caso de error
+            self.reject()
 
     def guardar_producto(self):
         """Guarda o actualiza el producto."""
@@ -365,28 +365,26 @@ class FormProducto(QDialog):  # ...
             self.categoria_combo.setStyleSheet("") # Resetear estilo
 
         try:
-            if self.editando:
-                producto = session.get(Producto, self.producto_id)
-                if producto:
-                    producto.nombre = nombre
-                    producto.categoria_id = categoria_id
-                    mensaje_exito = "Producto actualizado correctamente"
+            with get_session() as session:
+                if self.editando:
+                    producto = session.get(Producto, self.producto_id)
+                    if producto:
+                        producto.nombre = nombre
+                        producto.categoria_id = categoria_id
+                        mensaje_exito = "Producto actualizado correctamente"
+                    else:
+                        QMessageBox.warning(self, "Error", "Producto no encontrado")
+                        return
                 else:
-                    QMessageBox.warning(self, "Error", "Producto no encontrado")
-                    return
-            else:
-                producto = Producto(nombre=nombre, categoria_id=categoria_id)
-                session.add(producto)
-                mensaje_exito = "Producto guardado correctamente"
-            
-            session.commit()
+                    producto = Producto(nombre=nombre, categoria_id=categoria_id)
+                    session.add(producto)
+                    mensaje_exito = "Producto guardado correctamente"
+                session.commit()
             QMessageBox.information(self, "Éxito", mensaje_exito)
-            self.accept() # Cerrar el diálogo con Accepted
-            
+            self.accept()
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar el producto:\n{str(e)}")
-            self.reject() # Cerrar con reject en caso de error
+            self.reject()
 
     def eliminar_producto(self):
         # Permiso para eliminar producto
@@ -398,29 +396,29 @@ class FormProducto(QDialog):  # ...
         confirm = QMessageBox.question(self, "Eliminar", "¿Eliminar este producto?", QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             try:
-                producto = session.get(Producto, self.producto_id)
-                if producto:
-                    session.delete(producto)
-                    session.commit()
-                    print("DEBUG: Producto eliminado OK")
-                    QMessageBox.information(self, "Eliminado", "Producto eliminado correctamente.")
-                    self.accept()
-                else:
-                    QMessageBox.warning(self, "Error", "Producto no encontrado.")
-                    self.reject()
+                with get_session() as session:
+                    producto = session.get(Producto, self.producto_id)
+                    if producto:
+                        session.delete(producto)
+                        session.commit()
+                        print("DEBUG: Producto eliminado OK")
+                    else:
+                        QMessageBox.warning(self, "Error", "Producto no encontrado.")
+                        self.reject()
+                        return
+                QMessageBox.information(self, "Eliminado", "Producto eliminado correctamente.")
+                self.accept()
             except IntegrityError:
-                session.rollback()
                 print("DEBUG: IntegrityError al eliminar producto (tiene ventas)")
                 QMessageBox.warning(self, "No se puede eliminar",
                                     "Este producto tiene ventas registradas y no puede eliminarse.")
                 self.reject()
             except Exception as e:
-                session.rollback()
                 print(f"DEBUG: Error inesperado al eliminar producto: {e}")
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar:\n{e}")
                 self.reject()
         else:
-            self.reject() # Si no confirma, cerrar con reject
+            self.reject()
 
     def keyPressEvent(self, event):
         """Maneja eventos de teclado."""

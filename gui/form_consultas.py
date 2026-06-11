@@ -5,8 +5,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QDate, Qt, QUrl
 from PySide6.QtGui import QIcon, QDesktopServices
-from database import session
+from database import get_session
 from models import Venta, Cliente, Producto, Categoria, Personal, Cobro
+from sqlalchemy.orm import joinedload
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -141,18 +142,20 @@ class FormConsultas(QWidget):
     def cargar_productos_en_combo(self):
         """Carga productos en el combo con userData=producto_id. Sin '— Seleccionar —' para permitir placeholder."""
         self.producto_combo.clear()
-        productos = session.query(Producto).order_by(Producto.nombre.asc()).all()
-        for p in productos:
-            self.producto_combo.addItem(p.nombre or "", userData=p.id)
+        with get_session() as session:
+            productos = session.query(Producto).order_by(Producto.nombre.asc()).all()
+            for p in productos:
+                self.producto_combo.addItem(p.nombre or "", userData=p.id)
 
     def actualizar_empleados_por_rol(self):
         if not hasattr(self, "tipo_combo"):
             return
         rol = self.tipo_combo.currentText().lower()
-        empleados = session.query(Personal).filter(Personal.tipo == rol).all()
-        self.empleado_combo.clear()
-        for e in empleados:
-            self.empleado_combo.addItem(f"{e.apellidos}, {e.nombres} (DNI {e.dni})", userData=e.id)
+        with get_session() as session:
+            empleados = session.query(Personal).filter(Personal.tipo == rol).all()
+            self.empleado_combo.clear()
+            for e in empleados:
+                self.empleado_combo.addItem(f"{e.apellidos}, {e.nombres} (DNI {e.dni})", userData=e.id)
 
     # ---------------------------
     # Lógica: ejecutar consulta
@@ -166,97 +169,97 @@ class FormConsultas(QWidget):
         inicio = self.fecha_inicio.date().toPython()
         fin = self.fecha_fin.date().toPython()
 
-        query = session.query(Venta).filter(Venta.fecha >= inicio, Venta.fecha <= fin)
+        venta_opts = [joinedload(Venta.cliente), joinedload(Venta.producto)]
 
-        if seleccion == "Cobros por fecha":
-            # Traemos cobros entre fechas (inclusive), con join a Venta para mostrar cliente
-            resultados_cobros = (
-                session.query(Cobro)
-                .join(Venta, Cobro.venta_id == Venta.id)
-                .filter(Cobro.fecha >= inicio, Cobro.fecha <= fin)
-                .order_by(Cobro.fecha.asc(), Cobro.id.asc())
-                .all()
-            )
+        with get_session() as session:
+            if seleccion == "Cobros por fecha":
+                self.resultados_cobros = (
+                    session.query(Cobro)
+                    .join(Venta, Cobro.venta_id == Venta.id)
+                    .filter(Cobro.fecha >= inicio, Cobro.fecha <= fin)
+                    .options(
+                        joinedload(Cobro.venta).joinedload(Venta.cliente),
+                        joinedload(Cobro.cuota),
+                        joinedload(Cobro.registrado_por),
+                    )
+                    .order_by(Cobro.fecha.asc(), Cobro.id.asc())
+                    .all()
+                )
+                self.resultados_actuales = []
+                self.poblar_tabla_cobros(self.resultados_cobros)
+                return
 
-            # Guardamos por separado para un posible export futuro (no usamos las exportaciones de ventas)
-            self.resultados_cobros = resultados_cobros
-            self.resultados_actuales = []  # vacío a propósito para no confundir a exportaciones de ventas
+            base = session.query(Venta).filter(Venta.fecha >= inicio, Venta.fecha <= fin)
 
-            self.poblar_tabla_cobros(resultados_cobros)
-            return
+            if seleccion == "Ventas por fecha":
+                resultados = base.options(*venta_opts).all()
 
-
-        if seleccion == "Ventas por fecha":
-            resultados = query.all()
-
-        elif seleccion == "Ventas por cliente":
-            valor = ""
-            if hasattr(self, "cliente_combo"):
-                valor = (self.cliente_combo.currentText() or "").strip()
-            if not valor:
-                resultados = []
-            else:
-                if valor.isdigit():
-                    clientes = session.query(Cliente).filter(Cliente.dni == valor).all()
-                else:
-                    patron = f"%{valor.lower()}%"
-                    clientes = session.query(Cliente).filter(
-                        (Cliente.apellidos.ilike(patron)) |
-                        ((Cliente.apellidos + " " + Cliente.nombres).ilike(patron))
-                    ).all()
-
-                if len(clientes) == 0:
+            elif seleccion == "Ventas por cliente":
+                valor = ""
+                if hasattr(self, "cliente_combo"):
+                    valor = (self.cliente_combo.currentText() or "").strip()
+                if not valor:
                     resultados = []
-                elif len(clientes) == 1:
-                    cliente_id = clientes[0].id
-                    resultados = query.filter(Venta.cliente_id == cliente_id).all()
                 else:
-                    seleccionado = self.seleccionar_cliente(clientes)
-                    if seleccionado is None:
-                        resultados = []
+                    if valor.isdigit():
+                        clientes = session.query(Cliente).filter(Cliente.dni == valor).all()
                     else:
-                        resultados = query.filter(Venta.cliente_id == seleccionado.id).all()
+                        patron = f"%{valor.lower()}%"
+                        clientes = session.query(Cliente).filter(
+                            (Cliente.apellidos.ilike(patron)) |
+                            ((Cliente.apellidos + " " + Cliente.nombres).ilike(patron))
+                        ).all()
 
-        elif seleccion == "Ventas por producto":
-            producto_id = None
-            if hasattr(self, "producto_combo"):
-                producto_id = self.producto_combo.currentData()
+                    if len(clientes) == 0:
+                        resultados = []
+                    elif len(clientes) == 1:
+                        resultados = base.options(*venta_opts).filter(Venta.cliente_id == clientes[0].id).all()
+                    else:
+                        seleccionado = self.seleccionar_cliente(clientes)
+                        if seleccionado is None:
+                            resultados = []
+                        else:
+                            resultados = base.options(*venta_opts).filter(Venta.cliente_id == seleccionado.id).all()
 
-            if producto_id:
-                resultados = query.filter(Venta.producto_id == producto_id).all()
-            else:
-                texto = ""
+            elif seleccion == "Ventas por producto":
+                producto_id = None
                 if hasattr(self, "producto_combo"):
-                    texto = (self.producto_combo.currentText() or "").strip().lower()
-                if texto:
-                    resultados = query.join(Producto).filter(Producto.nombre.ilike(f"%{texto}%")).all()
+                    producto_id = self.producto_combo.currentData()
+                if producto_id:
+                    resultados = base.options(*venta_opts).filter(Venta.producto_id == producto_id).all()
                 else:
-                    resultados = []
+                    texto = ""
+                    if hasattr(self, "producto_combo"):
+                        texto = (self.producto_combo.currentText() or "").strip().lower()
+                    if texto:
+                        resultados = base.options(*venta_opts).join(Producto).filter(Producto.nombre.ilike(f"%{texto}%")).all()
+                    else:
+                        resultados = []
 
-        elif seleccion == "Ventas por calificación de cliente":
-            texto = self.calificacion_combo.currentText()
-            if texto == "Todas":
-                resultados = query.all()
-            elif texto == "Sin Calificación":
-                resultados = query.filter(Venta.cliente.has(Cliente.calificacion == None)).all()
+            elif seleccion == "Ventas por calificación de cliente":
+                texto = self.calificacion_combo.currentText()
+                if texto == "Todas":
+                    resultados = base.options(*venta_opts).all()
+                elif texto == "Sin Calificación":
+                    resultados = base.options(*venta_opts).filter(Venta.cliente.has(Cliente.calificacion == None)).all()
+                else:
+                    resultados = base.options(*venta_opts).filter(Venta.cliente.has(Cliente.calificacion == texto)).all()
+
+            elif seleccion == "Ventas por personal":
+                tipo = self.tipo_combo.currentText()
+                empleado_id = self.empleado_combo.currentData()
+                campo = {
+                    "Coordinador": Venta.coordinador_id,
+                    "Vendedor": Venta.vendedor_id,
+                    "Cobrador": Venta.cobrador_id
+                }[tipo]
+                resultados = base.options(*venta_opts).filter(campo == empleado_id).all()
+
+            elif seleccion == "Ventas anuladas":
+                resultados = base.options(*venta_opts).filter(Venta.anulada == True).all()
+
             else:
-                resultados = query.filter(Venta.cliente.has(Cliente.calificacion == texto)).all()
-
-        elif seleccion == "Ventas por personal":
-            tipo = self.tipo_combo.currentText()
-            empleado_id = self.empleado_combo.currentData()
-            campo = {
-                "Coordinador": Venta.coordinador_id,
-                "Vendedor": Venta.vendedor_id,
-                "Cobrador": Venta.cobrador_id
-            }[tipo]
-            resultados = query.filter(campo == empleado_id).all()
-
-        elif seleccion == "Ventas anuladas":
-            resultados = query.filter(Venta.anulada == True).all()
-
-        else:
-            resultados = []
+                resultados = []
 
         self.resultados_actuales = resultados
         self.poblar_tabla(resultados)

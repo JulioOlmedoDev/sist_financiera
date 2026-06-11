@@ -4,7 +4,7 @@ from sqlalchemy.exc import OperationalError
 from gui.dialog_crear_admin import DialogCrearAdmin
 from gui.login_form import LoginForm
 from gui.ventana_principal import VentanaPrincipal
-from database import session
+from database import get_session
 from models import Usuario, Base, engine
 import sys
 
@@ -38,7 +38,8 @@ if __name__ == "__main__":
 
     # ❷ Si no hay usuarios en la tabla, crear el super-usuario
     try:
-        existe = session.query(Usuario).count() > 0
+        with get_session() as session:
+            existe = session.query(Usuario).count() > 0
     except OperationalError as e:
         QMessageBox.critical(None, "Error de Base de Datos", f"No se puede acceder a la tabla usuarios:\n{e}")
         sys.exit(1)

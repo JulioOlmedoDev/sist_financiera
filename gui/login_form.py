@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap, QFont, QIntValidator
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Usuario
 from sqlalchemy.orm import joinedload
 import hashlib
@@ -48,7 +48,8 @@ class ChangePasswordDialog(QDialog):
     def __init__(self, parent, usuario: Usuario):
         super().__init__(parent)
         self.setWindowTitle("Cambiar contraseña")
-        self.usuario = usuario
+        self._usuario_id = usuario.id
+        self._usuario_nombre = usuario.nombre
 
         form = QFormLayout(self)
         self.new1 = QLineEdit(); self.new1.setEchoMode(QLineEdit.Password)
@@ -75,16 +76,17 @@ class ChangePasswordDialog(QDialog):
             QMessageBox.warning(self, "Contraseña insegura", "Usá al menos 10 caracteres."); return
         if pwd1 != pwd2:
             QMessageBox.warning(self, "No coincide", "Las contraseñas no coinciden."); return
-        if self.usuario.nombre.lower() in pwd1.lower():
+        if self._usuario_nombre.lower() in pwd1.lower():
             QMessageBox.warning(self, "Contraseña insegura", "No utilices el nombre de usuario dentro de la contraseña."); return
 
-        # Guardar
-        self.usuario.password = _hash_new(pwd1)
-        self.usuario.last_password_change = datetime.utcnow()
-        self.usuario.must_change_password = False
-        self.usuario.failed_attempts = 0
-        self.usuario.lock_until = None
-        session.commit()
+        with get_session() as session:
+            u = session.get(Usuario, self._usuario_id)
+            u.password = _hash_new(pwd1)
+            u.last_password_change = datetime.utcnow()
+            u.must_change_password = False
+            u.failed_attempts = 0
+            u.lock_until = None
+            session.commit()
         QMessageBox.information(self, "Listo", "Contraseña actualizada.")
         self.accept()
 
@@ -212,73 +214,83 @@ class LoginForm(QWidget):
         nombre_usuario = (self.user_input.text() or "").strip()
         password = (self.password_input.text() or "").strip()
 
-        usuario = (
-            session.query(Usuario)
-            .options(
-                joinedload(Usuario.permisos),   # <— eager-load permisos
-                joinedload(Usuario.rol),        # <— eager-load rol
-                joinedload(Usuario.personal),   # <— opcional, para el badge/menú
+        # 1. Cargar usuario con relaciones eager
+        with get_session() as session:
+            usuario = (
+                session.query(Usuario)
+                .options(
+                    joinedload(Usuario.permisos),
+                    joinedload(Usuario.rol),
+                    joinedload(Usuario.personal),
+                )
+                .filter_by(nombre=nombre_usuario)
+                .first()
             )
-            .filter_by(nombre=nombre_usuario)
-            .first()
-        )
 
         if (not usuario) or (not usuario.activo):
             QMessageBox.critical(self, "Error", "Usuario o contraseña incorrectos.")
             return
 
-        # ¿Cuenta bloqueada?
         now = datetime.utcnow()
         if usuario.lock_until and usuario.lock_until > now:
             minutos = int((usuario.lock_until - now).total_seconds() // 60) + 1
-            QMessageBox.warning(self, "Cuenta bloqueada", f"Intentá nuevamente en {minutos} min."); return
+            QMessageBox.warning(self, "Cuenta bloqueada", f"Intentá nuevamente en {minutos} min.")
+            return
 
         ok, legacy = _verify_any(password, usuario.password)
         if not ok:
-            usuario.failed_attempts = (usuario.failed_attempts or 0) + 1
-            if usuario.failed_attempts >= LOCK_THRESHOLD:
-                usuario.failed_attempts = 0
-                usuario.lock_until = now + timedelta(minutes=LOCK_MINUTES)
-                session.commit()
-                QMessageBox.warning(self, "Cuenta bloqueada", f"Demasiados intentos. Bloqueada por {LOCK_MINUTES} min.")
-            else:
-                session.commit()
-                QMessageBox.critical(self, "Error", "Usuario o contraseña incorrectos.")
+            # 2. Registrar intento fallido
+            with get_session() as session:
+                u = session.get(Usuario, usuario.id)
+                u.failed_attempts = (u.failed_attempts or 0) + 1
+                if u.failed_attempts >= LOCK_THRESHOLD:
+                    u.failed_attempts = 0
+                    u.lock_until = now + timedelta(minutes=LOCK_MINUTES)
+                    session.commit()
+                    QMessageBox.warning(self, "Cuenta bloqueada", f"Demasiados intentos. Bloqueada por {LOCK_MINUTES} min.")
+                else:
+                    session.commit()
+                    QMessageBox.critical(self, "Error", "Usuario o contraseña incorrectos.")
             return
 
-        # Login correcto: resetear contadores (AÚN sin commit)
-        usuario.failed_attempts = 0
-        usuario.lock_until = None
+        # 3. Resetear contadores y migrar hash legacy si aplica
+        with get_session() as session:
+            u = session.get(Usuario, usuario.id)
+            u.failed_attempts = 0
+            u.lock_until = None
+            if legacy:
+                u.password = _hash_new(password)
+                usuario.password = u.password
+                if not u.last_password_change:
+                    u.last_password_change = now
+                    usuario.last_password_change = now
+            session.commit()
 
-        # Si venía con sha256 legacy, rehash a Argon2 automáticamente
-        if legacy:
-            usuario.password = _hash_new(password)
-            if not usuario.last_password_change:
-                usuario.last_password_change = now
-
-        # ¿Debe cambiar contraseña? (primer login o vencida)
+        # 4. Cambio de contraseña forzado si corresponde
         expired = (not usuario.last_password_change) or ((now - usuario.last_password_change).days >= PASSWORD_MAX_AGE_DAYS)
         if usuario.must_change_password or expired:
             dlg = ChangePasswordDialog(self, usuario)
             if dlg.exec() != QDialog.Accepted:
-                # Forzamos el cambio: no ingresa si cancela
                 QMessageBox.information(self, "Acción requerida", "Debés cambiar tu contraseña para continuar.")
                 return
 
-        # Registrar acceso anterior y el actual (recién ahora que pasó todo)
+        # 5. Registrar acceso
+        with get_session() as session:
+            u = session.get(Usuario, usuario.id)
+            u.previous_login_at = usuario.last_login_at
+            u.last_login_at = now
+            session.commit()
         usuario.previous_login_at = usuario.last_login_at
         usuario.last_login_at = now
-        session.commit()
 
-        # --- Política 2FA: global, por usuario, o voluntaria (si el usuario lo activó) ---
-        require_global = (get_setting(session, "require_2fa_global", "0") == "1")
-        require_user   = bool(getattr(usuario, "require_2fa", False))
-        is_enabled     = bool(getattr(usuario, "totp_enabled", False) and getattr(usuario, "totp_secret", None))
-        need_token     = require_global or require_user or is_enabled
-
+        # 6. Política 2FA
+        with get_session() as session:
+            require_global = (get_setting(session, "require_2fa_global", "0") == "1")
+        require_user = bool(getattr(usuario, "require_2fa", False))
+        is_enabled   = bool(getattr(usuario, "totp_enabled", False) and getattr(usuario, "totp_secret", None))
+        need_token   = require_global or require_user or is_enabled
 
         if need_token:
-            # Si es requerido pero no está configurado: guiar a configurar
             if not getattr(usuario, "totp_enabled", False) or not getattr(usuario, "totp_secret", None):
                 QMessageBox.information(
                     self, "Token requerido",
@@ -288,9 +300,7 @@ class LoginForm(QWidget):
                 if dlg_setup.exec() != QDialog.Accepted:
                     QMessageBox.warning(self, "Acceso cancelado", "No se completó la configuración del token.")
                     return
-                # Se guardó totp_secret y totp_enabled=True dentro del diálogo
 
-            # Pedir el token
             td = TokenDialog(self)
             if td.exec() != QDialog.Accepted:
                 QMessageBox.information(self, "Acceso cancelado", "No se ingresó el token.")
@@ -301,7 +311,7 @@ class LoginForm(QWidget):
                 return
 
             totp = pyotp.TOTP(usuario.totp_secret, digits=6, interval=30)
-            if not totp.verify(code, valid_window=1):  # tolera leve desfase de reloj
+            if not totp.verify(code, valid_window=1):
                 QMessageBox.critical(self, "Token incorrecto", "El código ingresado no es válido.")
                 return
 
@@ -314,8 +324,8 @@ class LoginForm(QWidget):
         Devuelve True si puede continuar el login (2FA ok o no requerido).
         Devuelve False si falla o si el usuario cancela.
         """
-        # Lee política global (string "1" o "0")
-        require_global = (get_setting(session, "require_2fa_global", "0") == "1")
+        with get_session() as session:
+            require_global = (get_setting(session, "require_2fa_global", "0") == "1")
         # Requerido si es global o este usuario lo exige
         required = bool(getattr(usuario, "require_2fa", False)) or require_global
 

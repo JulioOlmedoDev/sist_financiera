@@ -1,4 +1,4 @@
-from database import session
+from database import get_session
 from models import Permiso
 
 permisos_base = [
@@ -15,11 +15,11 @@ permisos_base = [
     "realizar_cobro"
 ]
 
-for nombre in permisos_base:
-    existe = session.query(Permiso).filter_by(nombre=nombre).first()
-    if not existe:
-        nuevo = Permiso(nombre=nombre)
-        session.add(nuevo)
-
-session.commit()
+with get_session() as session:
+    for nombre in permisos_base:
+        existe = session.query(Permiso).filter_by(nombre=nombre).first()
+        if not existe:
+            nuevo = Permiso(nombre=nombre)
+            session.add(nuevo)
+    session.commit()
 print("✅ Permisos cargados correctamente.")

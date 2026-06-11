@@ -1,26 +1,11 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Text, ForeignKey, Enum, Boolean, Float
+from sqlalchemy import Column, Integer, String, Date, DateTime, Text, ForeignKey, Enum, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
-from dotenv import load_dotenv
+from sqlalchemy.orm import relationship
 from datetime import datetime
 
-import os
-
-load_dotenv()
+from database import engine, Session, get_session
 
 Base = declarative_base()
-
-# Conexion a la base de datos
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME")
-
-DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-engine = create_engine(DATABASE_URL, echo=True)
-Session = sessionmaker(bind=engine)
-session = Session()
 
 # --- MODELOS ---
 
@@ -272,5 +257,6 @@ def ensure_core_permissions(db_session) -> None:
 # Crear todas las tablas
 if __name__ == "__main__":
     Base.metadata.create_all(engine)
-    ensure_core_permissions(session)
+    with get_session() as s:
+        ensure_core_permissions(s)
     print("Base de datos y tablas creadas correctamente.")

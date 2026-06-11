@@ -5,7 +5,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 from PIL import Image, ImageQt
 import qrcode, pyotp
-from database import session
+from database import get_session
 
 ISSUER = "CREDANZA"  # lo que verá el usuario en su app de autenticación
 
@@ -99,10 +99,16 @@ class TwoFactorSetupDialog(QDialog):
             QMessageBox.critical(self, "Código incorrecto", "El código no es válido. Probá con el código actual.")
             return
 
-        # Guardar en DB (ahora sí)
+        # Guardar en DB usando merge sobre el objeto detachado
         self.usuario.totp_secret = self.secret
         self.usuario.totp_enabled = True
-        session.commit()
+        try:
+            with get_session() as session:
+                session.merge(self.usuario)
+                session.commit()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo guardar la configuración 2FA:\n{e}")
+            return
 
         QMessageBox.information(self, "Listo", "2FA activado correctamente.")
         self.accept()

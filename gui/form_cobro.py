@@ -10,8 +10,9 @@ from PySide6.QtWidgets import (
     QFormLayout, QDialogButtonBox, QSizePolicy, QComboBox
 )
 from PySide6.QtCore import QDate, Qt, Signal
-from database import session
+from database import get_session
 from models import Venta, Cuota, Cobro, Usuario
+from sqlalchemy.orm import joinedload
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll, DoubleSpinBoxSinScroll
 
 # ---------- Constantes de layout fijo ----------
@@ -75,7 +76,16 @@ class FormCobro(QWidget):
         super().__init__()
         self.venta_id = venta_id
         self.usuario_actual = usuario_actual
-        self.venta = session.query(Venta).get(self.venta_id) if self.venta_id else None
+        if self.venta_id:
+            with get_session() as _s:
+                self.venta = (
+                    _s.query(Venta)
+                    .options(joinedload(Venta.cliente), joinedload(Venta.garante))
+                    .filter_by(id=self.venta_id)
+                    .first()
+                )
+        else:
+            self.venta = None
 
         # Título de ventana
         if self.venta:
@@ -120,7 +130,14 @@ class FormCobro(QWidget):
         # Datos para autocompletar
         self._display_map = {}
         opciones = []
-        for v in session.query(Venta).filter_by(anulada=False).all():
+        with get_session() as _s:
+            _ventas_ac = (
+                _s.query(Venta)
+                .options(joinedload(Venta.cliente))
+                .filter_by(anulada=False)
+                .all()
+            )
+        for v in _ventas_ac:
             cli = v.cliente
             ap = (cli.apellidos or "").strip()
             no = (cli.nombres or "").strip()
@@ -348,17 +365,19 @@ class FormCobro(QWidget):
             self.observaciones_input.setText("")
             return
 
-        ultimo_con_obs = (
-            session.query(Cobro)
-            .filter(
-                Cobro.venta_id == self.venta.id,
-                Cobro.observaciones.isnot(None),
-                Cobro.observaciones != ""
+        with get_session() as _s:
+            _ult = (
+                _s.query(Cobro)
+                .filter(
+                    Cobro.venta_id == self.venta.id,
+                    Cobro.observaciones.isnot(None),
+                    Cobro.observaciones != ""
+                )
+                .order_by(Cobro.id.desc())
+                .first()
             )
-            .order_by(Cobro.id.desc())
-            .first()
-        )
-        self.observaciones_input.setText(ultimo_con_obs.observaciones if ultimo_con_obs else "")
+            _obs = _ult.observaciones if _ult else ""
+        self.observaciones_input.setText(_obs)
 
     # ---------------- Buscar / seleccionar ----------------
     def _on_busqueda_activada(self, texto):
@@ -372,13 +391,22 @@ class FormCobro(QWidget):
             self._cargar_venta(self._display_map[txt]); return
         num = "".join(ch for ch in txt if ch.isdigit())
         if num.isdigit():
-            v = session.query(Venta).get(int(num))
-            if v and not v.anulada:
-                self._cargar_venta(v.id); return
+            with get_session() as _s:
+                _v = _s.query(Venta).get(int(num))
+                _ok = bool(_v and not _v.anulada)
+                _vid = _v.id if _v else None
+            if _ok:
+                self._cargar_venta(_vid); return
         QMessageBox.warning(self, "Sin coincidencias", "No se encontraron ventas que coincidan.")
 
     def _cargar_venta(self, venta_id: int):
-        self.venta = session.query(Venta).get(venta_id)
+        with get_session() as _s:
+            self.venta = (
+                _s.query(Venta)
+                .options(joinedload(Venta.cliente), joinedload(Venta.garante))
+                .filter_by(id=venta_id)
+                .first()
+            )
         if not self.venta:
             return
         c = self.venta.cliente
@@ -397,12 +425,23 @@ class FormCobro(QWidget):
             self.btn_guardar.setEnabled(False)
             return
 
-        self.cuotas = (
-            session.query(Cuota)
-            .filter_by(venta_id=self.venta.id)
-            .order_by(Cuota.numero)
-            .all()
-        )
+        with get_session() as _s:
+            self.cuotas = (
+                _s.query(Cuota)
+                .filter_by(venta_id=self.venta.id)
+                .order_by(Cuota.numero)
+                .all()
+            )
+            _ultimos = {}
+            for _c in self.cuotas:
+                _u = (
+                    _s.query(Cobro)
+                    .filter_by(venta_id=self.venta.id, cuota_id=_c.id)
+                    .options(joinedload(Cobro.registrado_por))
+                    .order_by(Cobro.id.desc())
+                    .first()
+                )
+                _ultimos[_c.id] = _u
 
         self.tabla_cuotas.setRowCount(len(self.cuotas))
         for i, c in enumerate(self.cuotas):
@@ -415,13 +454,7 @@ class FormCobro(QWidget):
             else:
                 estado, color = "Pendiente", Qt.white
 
-            # Último cobro por CUOTA (si existe), para método/lugar/comp/usuario
-            ultimo = (
-                session.query(Cobro)
-                .filter_by(venta_id=self.venta.id, cuota_id=c.id)
-                .order_by(Cobro.id.desc())
-                .first()
-            )
+            ultimo = _ultimos.get(c.id)
 
             self.tabla_cuotas.setItem(i, 0, QTableWidgetItem(str(c.numero)))
             self.tabla_cuotas.setItem(i, 1, QTableWidgetItem(c.fecha_vencimiento.strftime("%d/%m/%Y")))
@@ -508,44 +541,45 @@ class FormCobro(QWidget):
             return
         # =====================================
 
-        restante = monto
-
-        for cuota in self.cuotas:
-            if cuota.pagada:
-                continue
-
-            saldo = max(cuota.monto_original - cuota.monto_pagado, 0.0)
-            if saldo <= 0:
-                continue
-
-            pago = min(saldo, restante)
-            if pago <= 0:
-                break
-
-            cobro = Cobro(
-                venta_id=self.venta.id,
-                cuota_id=cuota.id,
-                fecha=fecha_cobro,
-                monto=pago,
-                tipo=tipo,
-                observaciones=obs,
-                registrado_por_id=user_id,
-                metodo=None if metodo == "Sin especificar" else metodo,
-                lugar=None if lugar == "Sin especificar" else lugar,
-                comprobante=comp
+        with get_session() as session:
+            cuotas = (
+                session.query(Cuota)
+                .filter_by(venta_id=self.venta.id)
+                .order_by(Cuota.numero)
+                .all()
             )
-            session.add(cobro)
+            restante = monto
+            for cuota in cuotas:
+                if cuota.pagada:
+                    continue
+                saldo = max(cuota.monto_original - cuota.monto_pagado, 0.0)
+                if saldo <= 0:
+                    continue
+                pago = min(saldo, restante)
+                if pago <= 0:
+                    break
+                cobro = Cobro(
+                    venta_id=self.venta.id,
+                    cuota_id=cuota.id,
+                    fecha=fecha_cobro,
+                    monto=pago,
+                    tipo=tipo,
+                    observaciones=obs,
+                    registrado_por_id=user_id,
+                    metodo=None if metodo == "Sin especificar" else metodo,
+                    lugar=None if lugar == "Sin especificar" else lugar,
+                    comprobante=comp
+                )
+                session.add(cobro)
+                cuota.monto_pagado += pago
+                if cuota.monto_pagado >= cuota.monto_original - 1e-6:
+                    cuota.pagada = True
+                    cuota.fecha_pago = fecha_cobro
+                restante -= pago
+                if restante <= 0:
+                    break
+            session.commit()
 
-            cuota.monto_pagado += pago
-            if cuota.monto_pagado >= cuota.monto_original - 1e-6:
-                cuota.pagada = True
-                cuota.fecha_pago = fecha_cobro
-
-            restante -= pago
-            if restante <= 0:
-                break
-
-        session.commit()
         self.cobro_registrado.emit(self.venta.id)
         self.cargar_cuotas()
 
@@ -596,22 +630,24 @@ class FormCobro(QWidget):
                 if resp == QMessageBox.Yes:
                     return
 
-        self.venta.finalizada = True
-        session.commit()
-
         opciones = ["Excelente", "Bueno", "Riesgoso", "Incobrable"]
         calif, ok = QInputDialog.getItem(self, "Calificación Cliente",
                                          "Seleccionar calificación final:", opciones, 0, False)
-        if ok:
-            self.venta.cliente.calificacion = calif
-
+        calif_g, ok_g = None, False
         if self.venta.garante:
             calif_g, ok_g = QInputDialog.getItem(self, "Calificación Garante",
                                                  "Seleccionar calificación del garante:", opciones, 0, False)
-            if ok_g:
-                self.venta.garante.calificacion = calif_g
 
-        session.commit()
+        with get_session() as session:
+            v = session.query(Venta).get(self.venta.id)
+            v.finalizada = True
+            if ok and v.cliente:
+                v.cliente.calificacion = calif
+            if ok_g and v.garante:
+                v.garante.calificacion = calif_g
+            session.commit()
+
+        self.venta.finalizada = True
         self.venta_finalizada.emit(self.venta.id)
         QMessageBox.information(self, "Finalizado", "La venta fue finalizada correctamente.")
         self.close()
@@ -631,18 +667,19 @@ class FormCobro(QWidget):
                 QMessageBox.warning(self, "Error", "El monto debe ser mayor a cero.")
                 return
 
-            nueva_cuota = Cuota(
-                venta_id=self.venta.id,
-                numero=len(self.cuotas) + 1,
-                fecha_vencimiento=fecha,
-                monto_original=monto,
-                monto_pagado=0.0,
-                pagada=False,
-                refinanciada=True,
-                concepto="Cuota por mora e intereses"
-            )
-            session.add(nueva_cuota)
-            session.commit()
+            with get_session() as session:
+                nueva_cuota = Cuota(
+                    venta_id=self.venta.id,
+                    numero=len(self.cuotas) + 1,
+                    fecha_vencimiento=fecha,
+                    monto_original=monto,
+                    monto_pagado=0.0,
+                    pagada=False,
+                    refinanciada=True,
+                    concepto="Cuota por mora e intereses"
+                )
+                session.add(nueva_cuota)
+                session.commit()
             self.cuotas_actualizadas.emit(self.venta.id)
             QMessageBox.information(self, "Éxito", "Cuota por mora generada correctamente.")
             self.cargar_cuotas()

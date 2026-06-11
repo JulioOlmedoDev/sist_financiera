@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from collections import defaultdict, OrderedDict
-from database import session
+from database import get_session
 from models import Usuario, Permiso, Rol
 from utils.permisos import es_admin, contar_admins_activos
 
@@ -106,7 +106,7 @@ class FormPermisos(QWidget):
         self.showMaximized()
 
         self.permisos_checkboxes = {}  # nombre_permiso -> QCheckBox
-        self.perm_objs = {}            # nombre_permiso -> Permiso (DB)
+        self.perm_objs = {}            # nombre_permiso -> Permiso (detachado, solo se usa el .id)
 
         # Scroll principal
         scroll = QScrollArea()
@@ -246,31 +246,34 @@ class FormPermisos(QWidget):
 
     def _cargar_perm_objs(self):
         """
-        Carga a memoria un dict nombre_permiso -> Permiso(DB) para resolver IDs al guardar.
+        Carga a memoria un dict nombre_permiso -> Permiso(detachado) para resolver IDs al guardar.
         """
         self.perm_objs.clear()
-        todos = session.query(Permiso).all()
-        mapa = {p.nombre: p for p in todos}
+        with get_session() as session:
+            todos = session.query(Permiso).all()
+            mapa = {p.nombre: p for p in todos}
         self.perm_objs.update(mapa)
 
     def cargar_usuarios(self):
         self.usuario_combo.clear()
-        usuarios = session.query(Usuario).all()
-        for u in usuarios:
-            self.usuario_combo.addItem(u.nombre, userData=u.id)
+        with get_session() as session:
+            usuarios = session.query(Usuario).all()
+            for u in usuarios:
+                self.usuario_combo.addItem(u.nombre, userData=u.id)
 
     def cargar_permisos_usuario(self):
         usuario_id = self.usuario_combo.currentData()
-        usuario = session.query(Usuario).get(usuario_id)
-        if not usuario:
+        if not usuario_id:
             return
 
-        # Desmarcar todo
+        with get_session() as session:
+            usuario = session.query(Usuario).get(usuario_id)
+            if not usuario:
+                return
+            nombres_usuario = {p.nombre for p in usuario.permisos}
+
         for cb in self.permisos_checkboxes.values():
             cb.setChecked(False)
-
-        # Marcar lo que tenga en DB
-        nombres_usuario = {p.nombre for p in usuario.permisos}
         for nombre, cb in self.permisos_checkboxes.items():
             if nombre in nombres_usuario:
                 cb.setChecked(True)
@@ -299,42 +302,51 @@ class FormPermisos(QWidget):
 
     def guardar_permisos(self):
         usuario_id = self.usuario_combo.currentData()
-        usuario = session.query(Usuario).get(usuario_id)
-        if not usuario:
+        if not usuario_id:
             QMessageBox.warning(self, "Error", "Usuario no válido.")
             return
 
-        # Invariante: no dejar al sistema sin admin
-        era_admin = es_admin(usuario)
-        total_admins_activos = contar_admins_activos(session)
+        # Recolectar IDs de permisos seleccionados (de los objetos detachados en perm_objs)
+        ids_seleccionados = [
+            self.perm_objs[nombre].id
+            for nombre, cb in self.permisos_checkboxes.items()
+            if cb.isChecked() and nombre in self.perm_objs
+        ]
 
-        # Determinar si tras guardar seguirá siendo admin (por rol)
-        tiene_rol_admin = (getattr(usuario, "rol", None)
-                           and getattr(usuario.rol, "nombre", "") == "Administrador")
+        try:
+            with get_session() as session:
+                usuario = session.query(Usuario).get(usuario_id)
+                if not usuario:
+                    QMessageBox.warning(self, "Error", "Usuario no válido.")
+                    return
 
-        # Por permisos: si entre los seleccionados hay alguno que consideres "admin total",
-        # podrías mapearlo a un nombre específico. En esta versión, el "admin total"
-        # lo representamos por el rol (Gerente/Administrador). Si querés un permiso
-        # "admin_total" además, agregalo y chequealo acá.
-        seguira_siendo_admin = tiene_rol_admin  # (o incluir un permiso "admin_total")
+                # Invariante: no dejar al sistema sin admin
+                era_admin = es_admin(usuario)
+                total_admins_activos = contar_admins_activos(session)
+                tiene_rol_admin = (getattr(usuario, "rol", None)
+                                   and getattr(usuario.rol, "nombre", "") == "Administrador")
+                seguira_siendo_admin = tiene_rol_admin
 
-        if era_admin and total_admins_activos == 1 and not seguira_siendo_admin:
-            QMessageBox.warning(
-                self,
-                "No permitido",
-                "No podés quitar privilegios de administrador al último administrador activo.\n"
-                "Designá a otro administrador y volvé a intentar."
-            )
+                if era_admin and total_admins_activos == 1 and not seguira_siendo_admin:
+                    QMessageBox.warning(
+                        self,
+                        "No permitido",
+                        "No podés quitar privilegios de administrador al último administrador activo.\n"
+                        "Designá a otro administrador y volvé a intentar."
+                    )
+                    return
+
+                # Actualizar permisos usando objetos gestionados por esta sesión
+                permisos_seleccionados = (
+                    session.query(Permiso).filter(Permiso.id.in_(ids_seleccionados)).all()
+                    if ids_seleccionados else []
+                )
+                usuario.permisos.clear()
+                usuario.permisos.extend(permisos_seleccionados)
+                session.commit()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
             return
 
-        # Actualizar permisos del usuario con lo tildado
-        usuario.permisos.clear()
-        for nombre, cb in self.permisos_checkboxes.items():
-            if cb.isChecked():
-                p = self.perm_objs.get(nombre)
-                if p:
-                    usuario.permisos.append(p)
-
-        session.commit()
         QMessageBox.information(self, "Éxito", "Permisos actualizados correctamente.")
         self.close()

@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QComboBox
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Usuario, Personal
 from utils.permisos import tiene_permiso, es_admin
 import hashlib
@@ -104,16 +104,17 @@ class RecoveryDialog(QDialog):
     # ------------------------------------------------------------
     def _cargar_usuarios(self):
         self.combo.clear()
-        usuarios = session.query(Usuario).order_by(Usuario.nombre).all()
-
-        for u in usuarios:
-            texto = f"{u.nombre} — {u.email}"
-            self.combo.addItem(texto, userData=u.id)
+        with get_session() as session:
+            usuarios = session.query(Usuario).order_by(Usuario.nombre).all()
+            for u in usuarios:
+                texto = f"{u.nombre} — {u.email}"
+                self.combo.addItem(texto, userData=u.id)
 
     def _actualizar_usuario(self):
         uid = self.combo.currentData()
         if uid:
-            self.usuario_objetivo = session.query(Usuario).get(uid)
+            with get_session() as session:
+                self.usuario_objetivo = session.query(Usuario).get(uid)
         else:
             self.usuario_objetivo = None
 
@@ -135,8 +136,7 @@ class RecoveryDialog(QDialog):
 
         new_pass = (self.pass_input.text() or "").strip()
         if not new_pass:
-            QMessageBox.warning(self, "Campo vacío",
-                                "Ingresá una nueva contraseña.")
+            QMessageBox.warning(self, "Campo vacío", "Ingresá una nueva contraseña.")
             return
 
         self.usuario_objetivo.password = hashlib.sha256(new_pass.encode()).hexdigest()
@@ -144,20 +144,30 @@ class RecoveryDialog(QDialog):
         self.usuario_objetivo.failed_attempts = 0
         self.usuario_objetivo.lock_until = None
 
-        session.commit()
-        QMessageBox.information(self, "Éxito", "Contraseña actualizada correctamente.")
-        self.pass_input.clear()
+        try:
+            with get_session() as session:
+                session.merge(self.usuario_objetivo)
+                session.commit()
+            QMessageBox.information(self, "Éxito", "Contraseña actualizada correctamente.")
+            self.pass_input.clear()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
     def _toggle_2fa(self):
         if not self.usuario_objetivo:
             return
 
         self.usuario_objetivo.totp_enabled = not self.usuario_objetivo.totp_enabled
-        session.commit()
 
-        estado = "activado" if self.usuario_objetivo.totp_enabled else "desactivado"
-        QMessageBox.information(self, "2FA", f"Autenticación en dos pasos {estado}.")
-        self._actualizar_usuario()
+        try:
+            with get_session() as session:
+                session.merge(self.usuario_objetivo)
+                session.commit()
+            estado = "activado" if self.usuario_objetivo.totp_enabled else "desactivado"
+            QMessageBox.information(self, "2FA", f"Autenticación en dos pasos {estado}.")
+            self._actualizar_usuario()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
     def _regenerar_secret(self):
         if not self.usuario_objetivo:
@@ -165,10 +175,15 @@ class RecoveryDialog(QDialog):
 
         nuevo_secret = secrets.token_hex(16)
         self.usuario_objetivo.totp_secret = nuevo_secret
-        session.commit()
 
-        QMessageBox.information(
-            self,
-            "Nuevo token",
-            f"Se generó un nuevo código secreto.\n\nColocalo en Google Authenticator."
-        )
+        try:
+            with get_session() as session:
+                session.merge(self.usuario_objetivo)
+                session.commit()
+            QMessageBox.information(
+                self,
+                "Nuevo token",
+                f"Se generó un nuevo código secreto.\n\nColocalo en Google Authenticator."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))

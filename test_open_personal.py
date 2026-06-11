@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QApplication
 from gui.form_personal import FormPersonal
-from database import session
+from database import get_session
 from models import Usuario
 import sys
 
@@ -10,7 +10,8 @@ python test_open_personal.py
 """
 
 def get_user(username):
-    return session.query(Usuario).filter_by(usuario=username).first()
+    with get_session() as session:
+        return session.query(Usuario).filter_by(nombre=username).first()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -27,9 +28,9 @@ if __name__ == "__main__":
     elif opcion == "2":
         user = get_user("admin")
     else:
-        user = get_user("empleado")  # ajustá si tu usuario sin permiso tiene otro nombre
+        user = get_user("empleado")
 
-    print("Usuario elegido:", user.usuario if user else "Usuario no encontrado")
+    print("Usuario elegido:", user.nombre if user else "Usuario no encontrado")
 
     form = FormPersonal(usuario=user)
     form.show()

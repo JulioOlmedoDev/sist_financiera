@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout, QMessageBox, QLabel, QHeaderView, QSizePolicy
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Personal
 from gui.form_personal import FormPersonal
 from utils.permisos import tiene_permiso, es_admin
@@ -99,7 +99,8 @@ class FormListadoPersonal(QWidget):
     def actualizar_tabla(self):
         texto = (self.buscador.text() or "").strip().lower()
         try:
-            personales = session.query(Personal).order_by(Personal.apellidos, Personal.nombres).all()
+            with get_session() as session:
+                personales = session.query(Personal).order_by(Personal.apellidos, Personal.nombres).all()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo consultar personal:\n{e}")
             personales = []
@@ -178,21 +179,17 @@ class FormListadoPersonal(QWidget):
             if confirm != QMessageBox.Yes:
                 return
             try:
-                persona = session.get(Personal, personal_id)
-                if not persona:
-                    QMessageBox.warning(self, "No encontrado", "El personal ya no existe.")
-                    self.actualizar_tabla()
-                    return
-
-                # Evitar eliminar si existen dependencias críticas (opcional — solo ejemplo)
-                # Podés añadir cheques aquí si querés impedir eliminar personal que tenga ventas creadas, etc.
-
-                session.delete(persona)
-                session.commit()
+                with get_session() as session:
+                    persona = session.get(Personal, personal_id)
+                    if not persona:
+                        QMessageBox.warning(self, "No encontrado", "El personal ya no existe.")
+                        self.actualizar_tabla()
+                        return
+                    session.delete(persona)
+                    session.commit()
                 QMessageBox.information(self, "Eliminado", "Personal eliminado correctamente.")
                 self.actualizar_tabla()
             except Exception as e:
-                session.rollback()
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar:\n{e}")
         return callback
     

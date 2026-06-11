@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QDate, Qt, QRegularExpression, Signal
 from PySide6.QtGui import QRegularExpressionValidator
 
-from database import session
+from database import get_session
 from models import Personal
 from utils.permisos import es_admin, tiene_permiso
 
@@ -189,18 +189,19 @@ class FormPersonal(QWidget):
             self.cargar_datos()
 
     def cargar_datos(self):
-        personal = session.query(Personal).get(self.personal_id)
-        if not personal:
-            QMessageBox.warning(self, "Error", "Personal no encontrado")
-            return
-        for key, widget in self.campos.items():
-            value = getattr(personal, key, "")
-            if isinstance(widget, QLineEdit):
-                widget.setText(value or "")
-            elif isinstance(widget, QComboBox):
-                widget.setCurrentText(value or "")
-            elif isinstance(widget, QDateEdit):
-                widget.setDate(value or QDate.currentDate())
+        with get_session() as session:
+            personal = session.query(Personal).get(self.personal_id)
+            if not personal:
+                QMessageBox.warning(self, "Error", "Personal no encontrado")
+                return
+            for key, widget in self.campos.items():
+                value = getattr(personal, key, "")
+                if isinstance(widget, QLineEdit):
+                    widget.setText(value or "")
+                elif isinstance(widget, QComboBox):
+                    widget.setCurrentText(value or "")
+                elif isinstance(widget, QDateEdit):
+                    widget.setDate(value or QDate.currentDate())
 
     def guardar_personal(self):
         campos_requeridos = [
@@ -224,37 +225,37 @@ class FormPersonal(QWidget):
                 return self.mostrar_alerta(campo)
 
         try:
-            personal = session.query(Personal).get(self.personal_id) if self.editando else Personal()
-            for key, widget in self.campos.items():
-                if isinstance(widget, QLineEdit):
-                    setattr(personal, key, widget.text())
-                elif isinstance(widget, QComboBox):
-                    setattr(personal, key, widget.currentText())
-                elif isinstance(widget, QDateEdit):
-                    setattr(personal, key, widget.date().toPython())
+            with get_session() as session:
+                personal = session.query(Personal).get(self.personal_id) if self.editando else Personal()
+                for key, widget in self.campos.items():
+                    if isinstance(widget, QLineEdit):
+                        setattr(personal, key, widget.text())
+                    elif isinstance(widget, QComboBox):
+                        setattr(personal, key, widget.currentText())
+                    elif isinstance(widget, QDateEdit):
+                        setattr(personal, key, widget.date().toPython())
 
-            if not self.editando:
-                session.add(personal)
+                if not self.editando:
+                    session.add(personal)
 
-            session.commit()
+                session.commit()
             QMessageBox.information(self, "Éxito", f"Personal {'actualizado' if self.editando else 'guardado'} correctamente")
             self.personal_guardado.emit()
             self.close()
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar el personal:\n{e}")
 
     def eliminar_personal(self):
         confirmacion = QMessageBox.question(self, "Eliminar", "¿Estás seguro de eliminar este personal?", QMessageBox.Yes | QMessageBox.No)
         if confirmacion == QMessageBox.Yes:
             try:
-                personal = session.query(Personal).get(self.personal_id)
-                session.delete(personal)
-                session.commit()
+                with get_session() as session:
+                    personal = session.query(Personal).get(self.personal_id)
+                    session.delete(personal)
+                    session.commit()
                 QMessageBox.information(self, "Eliminado", "Personal eliminado correctamente")
                 self.close()
             except Exception as e:
-                session.rollback()
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el personal:\n{e}")
 
     def mostrar_alerta(self, campo):

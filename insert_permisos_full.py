@@ -1,10 +1,7 @@
 # insert_permisos_full.py
-from database import session
+from database import get_session
 from models import Permiso
 
-# === Definición de permisos con código y nombre ===
-# Guardamos el código como prefijo para que sea único/estable y fácil de consultar.
-# Formato sugerido: "XXXX Nombre legible"
 PERM_DEFS = {
     "0000 Módulo Ventas": [],
     "0001 Módulo Consultas": [],
@@ -56,17 +53,15 @@ PERM_DEFS = {
     "0500 Gestión de cobros": [],
 }
 
-def ensure_perm(nombre):
-    existe = session.query(Permiso).filter_by(nombre=nombre).first()
-    if not existe:
-        p = Permiso(nombre=nombre)
-        session.add(p)
 
 def main():
-    for n in PERM_DEFS.keys():
-        ensure_perm(n)
-    session.commit()
+    with get_session() as session:
+        for nombre in PERM_DEFS.keys():
+            if not session.query(Permiso).filter_by(nombre=nombre).first():
+                session.add(Permiso(nombre=nombre))
+        session.commit()
     print("✅ Permisos (con códigos) verificados/creados.")
+
 
 if __name__ == "__main__":
     main()

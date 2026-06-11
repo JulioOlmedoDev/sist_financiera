@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout, QScrollArea, QSizePolicy, QMessageBox, QHeaderView
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Usuario, Personal, Rol
 from gui.form_usuario import FormUsuario
 
@@ -104,94 +104,111 @@ class FormListadoUsuarios(QWidget):
 
     def cargar_datos(self):
         self.tabla.setRowCount(0)
-        self.usuarios = session.query(Usuario).all()
+        with get_session() as session:
+            usuarios = session.query(Usuario).all()
 
-        for i, u in enumerate(self.usuarios):
-            self.tabla.insertRow(i)
-            self.tabla.setItem(i, 0, QTableWidgetItem(str(u.id)))
-            self.tabla.setItem(i, 1, QTableWidgetItem(u.nombre or ""))
-            self.tabla.setItem(i, 2, QTableWidgetItem(u.email or ""))
+            for i, u in enumerate(usuarios):
+                self.tabla.insertRow(i)
+                self.tabla.setItem(i, 0, QTableWidgetItem(str(u.id)))
+                self.tabla.setItem(i, 1, QTableWidgetItem(u.nombre or ""))
+                self.tabla.setItem(i, 2, QTableWidgetItem(u.email or ""))
 
-            # Rol
-            rol_nombre = ""
-            if getattr(u, "rol_id", None):
-                r = session.query(Rol).get(u.rol_id)
-                rol_nombre = r.nombre if r else ""
-            self.tabla.setItem(i, 3, QTableWidgetItem(rol_nombre))
+                # Rol
+                rol_nombre = ""
+                if getattr(u, "rol_id", None):
+                    r = session.query(Rol).get(u.rol_id)
+                    rol_nombre = r.nombre if r else ""
+                self.tabla.setItem(i, 3, QTableWidgetItem(rol_nombre))
 
-            # Personal
-            personal = session.query(Personal).get(u.personal_id)
-            nombre_personal = f"{personal.apellidos}, {personal.nombres}" if personal else ""
-            self.tabla.setItem(i, 4, QTableWidgetItem(nombre_personal))
+                # Personal
+                personal = session.query(Personal).get(u.personal_id)
+                nombre_personal = f"{personal.apellidos}, {personal.nombres}" if personal else ""
+                self.tabla.setItem(i, 4, QTableWidgetItem(nombre_personal))
 
-            # Activo
-            estado = "Sí" if u.activo else "No"
-            self.tabla.setItem(i, 5, QTableWidgetItem(estado))
+                # Activo
+                estado = "Sí" if u.activo else "No"
+                self.tabla.setItem(i, 5, QTableWidgetItem(estado))
 
     def usuario_seleccionado(self):
         fila = self.tabla.currentRow()
         if fila == -1:
             return None
-        usuario_id = int(self.tabla.item(fila, 0).text())
-        return session.query(Usuario).get(usuario_id)
+        return int(self.tabla.item(fila, 0).text())
 
     def editar_usuario(self):
-        usuario = self.usuario_seleccionado()
-        if not usuario:
+        usuario_id = self.usuario_seleccionado()
+        if not usuario_id:
             QMessageBox.warning(self, "Error", "Seleccioná un usuario.")
             return
-        self.abrir_form_usuario(usuario.personal_id)
+        with get_session() as session:
+            u = session.query(Usuario).get(usuario_id)
+            personal_id = u.personal_id if u else None
+        self.abrir_form_usuario(personal_id)
 
     def cambiar_estado_usuario(self):
-        usuario = self.usuario_seleccionado()
-        if not usuario:
+        usuario_id = self.usuario_seleccionado()
+        if not usuario_id:
             QMessageBox.warning(self, "Error", "Seleccioná un usuario.")
             return
 
         from models import Rol as RolModel
 
-        if usuario.activo:
-            # No permitir desactivar al único admin activo
-            if usuario.rol and usuario.rol.nombre == "Administrador":
-                admins_activos = session.query(Usuario).join(RolModel).filter(
-                    RolModel.nombre == "Administrador",
-                    Usuario.activo == True
-                ).count()
-                if admins_activos <= 1:
-                    QMessageBox.warning(
-                        self,
-                        "Acción no permitida",
-                        "No se puede desactivar al único administrador activo del sistema."
-                    )
+        try:
+            with get_session() as session:
+                usuario = session.query(Usuario).get(usuario_id)
+                if not usuario:
                     return
+                activo = usuario.activo
+                rol_nombre = usuario.rol.nombre if usuario.rol else ""
 
-            confirmar = QMessageBox.question(
-                self, "Desactivar", "¿Desactivar este usuario?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            if confirmar == QMessageBox.Yes:
-                usuario.activo = False
-        else:
-            confirmar = QMessageBox.question(
-                self, "Reactivar", "¿Reactivar este usuario?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            if confirmar == QMessageBox.Yes:
-                usuario.activo = True
+                if activo and rol_nombre == "Administrador":
+                    admins_activos = session.query(Usuario).join(RolModel).filter(
+                        RolModel.nombre == "Administrador",
+                        Usuario.activo == True
+                    ).count()
+                    if admins_activos <= 1:
+                        QMessageBox.warning(
+                            self,
+                            "Acción no permitida",
+                            "No se puede desactivar al único administrador activo del sistema."
+                        )
+                        return
 
-        session.commit()
+            if activo:
+                confirmar = QMessageBox.question(
+                    self, "Desactivar", "¿Desactivar este usuario?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+            else:
+                confirmar = QMessageBox.question(
+                    self, "Reactivar", "¿Reactivar este usuario?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+
+            if confirmar != QMessageBox.Yes:
+                return
+
+            with get_session() as session:
+                usuario = session.query(Usuario).get(usuario_id)
+                if usuario:
+                    usuario.activo = not activo
+                    session.commit()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo cambiar el estado:\n{e}")
+
         self.cargar_datos()
         self.actualizar_estado_boton()
 
     def actualizar_estado_boton(self):
-        usuario = self.usuario_seleccionado()
-        if usuario:
-            if usuario.activo:
-                self.btn_estado.setText("Desactivar")
-            else:
-                self.btn_estado.setText("Reactivar")
-        else:
+        fila = self.tabla.currentRow()
+        if fila == -1:
             self.btn_estado.setText("Activar/Desactivar")
+            return
+        item = self.tabla.item(fila, 5)
+        if item and item.text() == "Sí":
+            self.btn_estado.setText("Desactivar")
+        else:
+            self.btn_estado.setText("Reactivar")
 
     def abrir_form_usuario(self, personal_id=None):
         self.form = FormUsuario(usuario=self.usuario)

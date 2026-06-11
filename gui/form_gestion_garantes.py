@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout, QLineEdit, QHeaderView, QFrame
 )
 from PySide6.QtCore import Qt, QTimer
-from database import session
+from database import get_session
 from models import Garante
 from gui.form_garante import FormGarante
 
@@ -113,7 +113,8 @@ class FormGestionGarantes(QWidget):
 
     # ---------- Datos ----------
     def cargar_datos(self):
-        self.todos_los_garantes = session.query(Garante).all()
+        with get_session() as session:
+            self.todos_los_garantes = session.query(Garante).all()
         self.mostrar_garantes(self.todos_los_garantes)
 
     def mostrar_garantes(self, lista):

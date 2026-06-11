@@ -5,8 +5,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QCursor
 from PySide6.QtCore import Signal, QDate, QTimer, Qt, QEvent
-from database import session
+from database import get_session
 from models import Cliente, Garante, Producto, Personal, Venta, Cuota, Tasa, Cobro
+from sqlalchemy.orm import joinedload
 from gui.form_cliente import FormCliente
 from gui.form_garante import FormGarante
 from datetime import date
@@ -377,8 +378,9 @@ class FormVenta(QWidget):
             self.tem_input.blockSignals(False); self.tna_input.blockSignals(False)
 
     def _on_plan_changed(self, plan: str):
-        tasa = session.query(Tasa).filter_by(plan=plan).first()
-        tem_val, tna_val, tea_val = (tasa.tem, tasa.tna, tasa.tea) if tasa else (0.0, 0.0, 0.0)
+        with get_session() as _s:
+            tasa = _s.query(Tasa).filter_by(plan=plan).first()
+            tem_val, tna_val, tea_val = (tasa.tem, tasa.tna, tasa.tea) if tasa else (0.0, 0.0, 0.0)
         for spin, val in ((self.tem_input, tem_val), (self.tna_input, tna_val), (self.tea_input, tea_val)):
             spin.blockSignals(True); spin.setValue(val); spin.blockSignals(False)
 
@@ -395,10 +397,28 @@ class FormVenta(QWidget):
 
     # --- Carga de edición ---
     def cargar_venta_existente(self):
-        venta = session.query(Venta).get(self.venta_id)
-        if not venta:
-            QMessageBox.critical(self, "Error", "Venta no encontrada.")
-            return self.close()
+        with get_session() as _s:
+            venta = (
+                _s.query(Venta)
+                .options(
+                    joinedload(Venta.cliente),
+                    joinedload(Venta.garante),
+                    joinedload(Venta.creada_por),
+                )
+                .filter_by(id=self.venta_id)
+                .first()
+            )
+            if not venta:
+                QMessageBox.critical(self, "Error", "Venta no encontrada.")
+                return self.close()
+            ultimo_cobro = (
+                _s.query(Cobro)
+                .filter_by(venta_id=venta.id)
+                .options(joinedload(Cobro.registrado_por))
+                .order_by(desc(Cobro.id))
+                .first()
+            )
+            _uc_nombre = ultimo_cobro.registrado_por.nombre if (ultimo_cobro and ultimo_cobro.registrado_por) else None
 
         self.venta_existente = venta
         es_finalizada = venta.finalizada
@@ -496,15 +516,9 @@ class FormVenta(QWidget):
             lbl_cp = QLabel("Creada por:"); lbl_cp.setStyleSheet(self.label_style)
             self.form.addRow(lbl_cp, QLabel(venta.creada_por.nombre))
 
-        ultimo_cobro = (
-            session.query(Cobro)
-            .filter_by(venta_id=venta.id)
-            .order_by(desc(Cobro.id))
-            .first()
-        )
-        if ultimo_cobro and ultimo_cobro.registrado_por:
+        if _uc_nombre:
             lbl_uc = QLabel("Último cobro cargado por:"); lbl_uc.setStyleSheet(self.label_style)
-            self.form.addRow(lbl_uc, QLabel(ultimo_cobro.registrado_por.nombre))
+            self.form.addRow(lbl_uc, QLabel(_uc_nombre))
 
         # --- Controles extra si está finalizada ---
         if venta.finalizada:
@@ -535,14 +549,16 @@ class FormVenta(QWidget):
 
     # --- Cargas ---
     def cargar_clientes(self):
-        self.clientes = session.query(Cliente).all()
+        with get_session() as session:
+            self.clientes = session.query(Cliente).all()
         lista = [f"{c.apellidos}, {c.nombres} (DNI {c.dni})" for c in self.clientes]
         comp = QCompleter(lista); comp.setCaseSensitivity(Qt.CaseInsensitive)
         self.cliente_input.setCompleter(comp)
         comp.popup().installEventFilter(self)
 
     def cargar_garantes(self):
-        self.garantes = session.query(Garante).all()
+        with get_session() as session:
+            self.garantes = session.query(Garante).all()
         lista = [f"{g.apellidos}, {g.nombres} (DNI {g.dni})" for g in self.garantes]
         comp = QCompleter(lista); comp.setCaseSensitivity(Qt.CaseInsensitive)
         self.garante_input.setCompleter(comp)
@@ -550,16 +566,18 @@ class FormVenta(QWidget):
 
     def cargar_productos(self):
         self.producto_combo.clear()
-        for p in session.query(Producto).all():
-            self.producto_combo.addItem(p.nombre, userData=p.id)
+        with get_session() as session:
+            for p in session.query(Producto).all():
+                self.producto_combo.addItem(p.nombre, userData=p.id)
 
     def cargar_personal(self):
-        for tipo, combo in [("Coordinador", self.coordinador_combo),
-                            ("Vendedor", self.vendedor_combo),
-                            ("Cobrador", self.cobrador_combo)]:
-            combo.clear()
-            for per in session.query(Personal).filter_by(tipo=tipo).all():
-                combo.addItem(per.nombres, userData=per.id)
+        with get_session() as session:
+            for tipo, combo in [("Coordinador", self.coordinador_combo),
+                                ("Vendedor", self.vendedor_combo),
+                                ("Cobrador", self.cobrador_combo)]:
+                combo.clear()
+                for per in session.query(Personal).filter_by(tipo=tipo).all():
+                    combo.addItem(per.nombres, userData=per.id)
 
     # --- Cálculo ---
     def calcular_ptf(self):
@@ -601,7 +619,15 @@ class FormVenta(QWidget):
                             cambios.append("calificación del garante")
 
                     if cambios:
-                        session.commit()
+                        nueva_cc = self.calif_cliente_combo.currentText() if hasattr(self, 'calif_cliente_combo') else None
+                        nueva_cg = self.calif_garante_combo.currentText() if hasattr(self, 'calif_garante_combo') else None
+                        with get_session() as _s:
+                            _v = _s.query(Venta).get(self.venta_id)
+                            if nueva_cc and _v.cliente and _v.cliente.calificacion != nueva_cc:
+                                _v.cliente.calificacion = nueva_cc
+                            if nueva_cg and _v.garante and _v.garante.calificacion != nueva_cg:
+                                _v.garante.calificacion = nueva_cg
+                            _s.commit()
                         QMessageBox.information(self, "Actualizado", "Se actualizaron: " + ", ".join(cambios) + ".")
                     else:
                         QMessageBox.information(self, "Sin cambios", "No se detectaron cambios de calificación.")
@@ -611,9 +637,11 @@ class FormVenta(QWidget):
                 # 2) Si la venta está ACTIVA: desde Editar sólo se permite ANULAR.
                 if not venta.anulada:  # venta activa
                     if hasattr(self, 'chk_anulada') and self.chk_anulada.isChecked():
-                        venta.anulada = True
-                        venta.descripcion = (self.motivo_anulacion.toPlainText() or "").strip() or None
-                        session.commit()
+                        with get_session() as _s:
+                            _v = _s.query(Venta).get(self.venta_id)
+                            _v.anulada = True
+                            _v.descripcion = (self.motivo_anulacion.toPlainText() or "").strip() or None
+                            _s.commit()
                         QMessageBox.information(self, "Venta anulada", "La venta fue anulada correctamente.")
                         self.close()
                         return
@@ -694,21 +722,40 @@ class FormVenta(QWidget):
                 descripcion=None,
                 creada_por_id=(self.usuario_actual.id if getattr(self, "usuario_actual", None) else None)
             )
-            session.add(venta); session.commit()
+            with get_session() as session:
+                session.add(venta)
+                session.flush()  # obtiene venta.id sin cerrar la transacción
 
-            # Generar cuotas…
-            freq = venta.plan_pago
-            inicio = venta.fecha_inicio_pago or venta.fecha
-            for i in range(venta.num_cuotas):
-                if freq == "mensual": fv = inicio + relativedelta(months=i)
-                elif freq == "semanal": fv = inicio + relativedelta(weeks=i)
-                else: fv = inicio + relativedelta(days=i)
-                cuota = Cuota(
-                    venta_id=venta.id, numero=i + 1, fecha_vencimiento=fv,
-                    monto_original=venta.valor_cuota, monto_pagado=0.0, pagada=False
+                # Generar cuotas…
+                freq = venta.plan_pago
+                inicio = venta.fecha_inicio_pago or venta.fecha
+                for i in range(venta.num_cuotas):
+                    if freq == "mensual": fv = inicio + relativedelta(months=i)
+                    elif freq == "semanal": fv = inicio + relativedelta(weeks=i)
+                    else: fv = inicio + relativedelta(days=i)
+                    cuota = Cuota(
+                        venta_id=venta.id, numero=i + 1, fecha_vencimiento=fv,
+                        monto_original=venta.valor_cuota, monto_pagado=0.0, pagada=False
+                    )
+                    session.add(cuota)
+                session.commit()
+
+            # Re-cargar con todas las relaciones para los generadores de documentos
+            with get_session() as _rs:
+                venta = (
+                    _rs.query(Venta)
+                    .options(
+                        joinedload(Venta.cliente),
+                        joinedload(Venta.garante),
+                        joinedload(Venta.producto),
+                        joinedload(Venta.cuotas),
+                        joinedload(Venta.coordinador),
+                        joinedload(Venta.vendedor),
+                        joinedload(Venta.cobrador),
+                    )
+                    .filter_by(id=venta.id)
+                    .first()
                 )
-                session.add(cuota)
-            session.commit()
 
             # Diálogo de docs (igual que antes)...
             msg = QMessageBox(self)
@@ -758,7 +805,6 @@ class FormVenta(QWidget):
             self.close(); self.sale_saved.emit()
 
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar la venta:\n{e}")
 
     def _mover_boton_guardar_al_final(self):

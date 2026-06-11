@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QMessageBox
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
+from models import Usuario
 from gui.change_password_dialog import ChangePasswordDialog
 from gui.two_factor_setup import TwoFactorSetupDialog
 
@@ -69,13 +70,17 @@ class FormMiPerfil(QWidget):
             if ok == QMessageBox.Yes:
                 self.usuario.totp_enabled = False
                 self.usuario.totp_secret = None
-                session.commit()
-                self._refresh()
-                QMessageBox.information(self, "Actualizado", "Ingreso con token desactivado.")
+                try:
+                    with get_session() as session:
+                        session.merge(self.usuario)
+                        session.commit()
+                    self._refresh()
+                    QMessageBox.information(self, "Actualizado", "Ingreso con token desactivado.")
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", str(e))
         else:
             # Activar (abre asistente con QR)
             dlg = TwoFactorSetupDialog(self, self.usuario)
             if dlg.exec():
-                # El propio diálogo guarda en DB si se activó
-                session.refresh(self.usuario)
+                # TwoFactorSetupDialog ya actualizó self.usuario en memoria y persistió en DB
                 self._refresh()

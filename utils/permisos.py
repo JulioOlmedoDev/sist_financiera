@@ -1,11 +1,12 @@
 # utils/permisos.py
 from typing import Optional
-from database import session as dbsession
+from database import get_session
 from models import Permiso, Usuario
 
 # Modo compatibilidad: si aún no migraste permisos, no bloquear la UI.
 try:
-    _PERM_COUNT = dbsession.query(Permiso).count()
+    with get_session() as _s:
+        _PERM_COUNT = _s.query(Permiso).count()
     _SAFE_MODE = (_PERM_COUNT == 0)
 except Exception:
     _SAFE_MODE = True  # si falla la DB al importar, no bloquear

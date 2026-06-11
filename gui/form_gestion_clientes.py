@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout, QHeaderView, QLineEdit, QFrame
 )
 from PySide6.QtCore import Qt, QTimer
-from database import session
+from database import get_session
 from models import Cliente
 from gui.form_cliente import FormCliente
 
@@ -117,7 +117,8 @@ class FormGestionClientes(QWidget):
 
     # ---------- Datos ----------
     def cargar_datos(self):
-        self.todos_los_clientes = session.query(Cliente).all()
+        with get_session() as session:
+            self.todos_los_clientes = session.query(Cliente).all()
         self.mostrar_clientes(self.todos_los_clientes)
 
     def mostrar_clientes(self, lista):

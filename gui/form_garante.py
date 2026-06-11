@@ -6,7 +6,7 @@ from PySide6.QtCore import QDate, Qt, QRegularExpression, Signal
 from PySide6.QtGui import QRegularExpressionValidator
 
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
-from database import session
+from database import get_session
 from models import Garante
 
 
@@ -166,19 +166,19 @@ class FormGarante(QWidget):
             self.cargar_datos()
 
     def cargar_datos(self):
-        garante = session.query(Garante).get(self.garante_id)
-        if not garante:
-            QMessageBox.warning(self, "Error", "Garante no encontrado")
-            return
-
-        for key, widget in self.campos.items():
-            valor = getattr(garante, key, "")
-            if isinstance(widget, QLineEdit):
-                widget.setText(valor or "")
-            elif isinstance(widget, ComboBoxSinScroll):
-                widget.setCurrentText(valor or "")
-            elif isinstance(widget, DateEditSinScroll):
-                widget.setDate(valor if valor else QDate.currentDate())
+        with get_session() as session:
+            garante = session.query(Garante).get(self.garante_id)
+            if not garante:
+                QMessageBox.warning(self, "Error", "Garante no encontrado")
+                return
+            for key, widget in self.campos.items():
+                valor = getattr(garante, key, "")
+                if isinstance(widget, QLineEdit):
+                    widget.setText(valor or "")
+                elif isinstance(widget, ComboBoxSinScroll):
+                    widget.setCurrentText(valor or "")
+                elif isinstance(widget, DateEditSinScroll):
+                    widget.setDate(valor if valor else QDate.currentDate())
 
         self.btn_guardar.setText("Actualizar Garante")
 
@@ -203,20 +203,21 @@ class FormGarante(QWidget):
                 return self.mostrar_alerta(campo)
 
         try:
-            garante = session.query(Garante).get(self.garante_id) if self.editando else Garante()
+            with get_session() as session:
+                garante = session.query(Garante).get(self.garante_id) if self.editando else Garante()
 
-            for key, widget in self.campos.items():
-                if isinstance(widget, QLineEdit):
-                    setattr(garante, key, widget.text())
-                elif isinstance(widget, ComboBoxSinScroll):
-                    setattr(garante, key, widget.currentText())
-                elif isinstance(widget, DateEditSinScroll):
-                    setattr(garante, key, widget.date().toPython())
+                for key, widget in self.campos.items():
+                    if isinstance(widget, QLineEdit):
+                        setattr(garante, key, widget.text())
+                    elif isinstance(widget, ComboBoxSinScroll):
+                        setattr(garante, key, widget.currentText())
+                    elif isinstance(widget, DateEditSinScroll):
+                        setattr(garante, key, widget.date().toPython())
 
-            if not self.editando:
-                session.add(garante)
+                if not self.editando:
+                    session.add(garante)
 
-            session.commit()
+                session.commit()
             QMessageBox.information(self, "Éxito", f"Garante {'actualizado' if self.editando else 'guardado'} correctamente")
             self.garante_guardado.emit()
 
@@ -226,20 +227,19 @@ class FormGarante(QWidget):
                 self.limpiar_formulario()
 
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error", f"No se pudo guardar el garante:\n{e}")
 
     def eliminar_garante(self):
         confirmacion = QMessageBox.question(self, "Eliminar", "¿Estás seguro de eliminar este garante?", QMessageBox.Yes | QMessageBox.No)
         if confirmacion == QMessageBox.Yes:
             try:
-                garante = session.query(Garante).get(self.garante_id)
-                session.delete(garante)
-                session.commit()
+                with get_session() as session:
+                    garante = session.query(Garante).get(self.garante_id)
+                    session.delete(garante)
+                    session.commit()
                 QMessageBox.information(self, "Eliminado", "Garante eliminado correctamente")
                 self.close()
             except Exception as e:
-                session.rollback()
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el garante:\n{e}")
 
     def mostrar_alerta(self, campo):

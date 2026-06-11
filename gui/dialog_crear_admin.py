@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QMessageBox
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Usuario, Permiso
 import hashlib
 
@@ -68,35 +68,32 @@ class DialogCrearAdmin(QDialog):
             QMessageBox.warning(self, "Error", "Las contraseñas no coinciden.")
             return
 
-        # Verificar que no exista ya ese usuario o ese email
-        if session.query(Usuario).filter_by(nombre=user).first():
-            QMessageBox.warning(self, "Error", f"El usuario «{user}» ya existe.")
-            return
-        if session.query(Usuario).filter_by(email=email).first():
-            QMessageBox.warning(self, "Error", f"El email «{email}» ya está en uso.")
-            return
-
         # Hashear la contraseña
         pwd_hash = hashlib.sha256(pwd.encode("utf-8")).hexdigest()
 
-        # Crear superusuario y asignar todos los permisos existentes
         try:
-            admin = Usuario(
-                nombre=user,
-                email=email,
-                password=pwd_hash,
-                rol_id=None,
-                personal_id=None
-            )
+            with get_session() as session:
+                # Verificar que no exista ya ese usuario o ese email
+                if session.query(Usuario).filter_by(nombre=user).first():
+                    QMessageBox.warning(self, "Error", f"El usuario «{user}» ya existe.")
+                    return
+                if session.query(Usuario).filter_by(email=email).first():
+                    QMessageBox.warning(self, "Error", f"El email «{email}» ya está en uso.")
+                    return
 
-            # Asignar todos los permisos de la tabla permisos
-            todos = session.query(Permiso).all()
-            admin.permisos.extend(todos)
-
-            session.add(admin)
-            session.commit()
+                # Crear superusuario y asignar todos los permisos existentes
+                admin = Usuario(
+                    nombre=user,
+                    email=email,
+                    password=pwd_hash,
+                    rol_id=None,
+                    personal_id=None
+                )
+                todos = session.query(Permiso).all()
+                admin.permisos.extend(todos)
+                session.add(admin)
+                session.commit()
         except Exception as e:
-            session.rollback()
             QMessageBox.critical(self, "Error al crear admin", str(e))
             return
 

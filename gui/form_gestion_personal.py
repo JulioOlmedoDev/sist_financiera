@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout, QHeaderView, QLineEdit
 )
 from PySide6.QtCore import Qt
-from database import session
+from database import get_session
 from models import Personal
 from gui.form_personal import FormPersonal
 
@@ -67,7 +67,8 @@ class FormGestionPersonal(QWidget):
         self.cargar_datos()
 
     def cargar_datos(self):
-        self.todos = session.query(Personal).all()
+        with get_session() as session:
+            self.todos = session.query(Personal).all()
         self.mostrar(self.todos)
 
     def mostrar(self, lista):
