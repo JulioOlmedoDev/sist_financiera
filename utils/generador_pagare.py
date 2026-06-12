@@ -183,22 +183,13 @@ def generar_pagare_excel(venta: Venta) -> str:
     ws = wb.active
 
     for row in ws.iter_rows():
-        for cell in row:
-            val = cell.value
-            if isinstance(val, str):
-                for key, v in datos.items():
-                    token = f"{{{{{key}}}}}"
-                    if token in val:
-                        cell.value = val.replace(token, str(v))
-                        break
-
-    for col in ws.columns:
-        max_length = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            if cell.value:
-                max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions[col_letter].width = max_length + 2
+            for cell in row:
+                val = cell.value
+                if isinstance(val, str):
+                    for key, v in datos.items():
+                        token = f"{{{{{key}}}}}"
+                        val = val.replace(token, str(v))
+                    cell.value = val
 
     salida_path = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx").name
     wb.save(salida_path)
