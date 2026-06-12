@@ -1,49 +1,10 @@
 from dateutil.relativedelta import relativedelta
 from docx import Document
-from openpyxl import load_workbook
-from openpyxl.styles import numbers
-from openpyxl.utils import get_column_letter
-from pathlib import Path
 from models import Venta
 from decimal import Decimal, ROUND_HALF_UP
 
 import tempfile
 from datetime import datetime
-import warnings
-import shutil
-
-# Silenciar el warning de openpyxl por encabezado/pie
-warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
-
-# ========= Helper: sanitizar plantilla Excel (no toca el original) =========
-def _sanitizar_xlsx_origen(path_in: str) -> str:
-    tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx").name
-    shutil.copyfile(path_in, tmp_path)
-    try:
-        wb = load_workbook(tmp_path)
-        ws = wb.active
-        hf = getattr(ws, "header_footer", None)
-        if hf:
-            for attr in ("left_header", "center_header", "right_header",
-                         "left_footer", "center_footer", "right_footer"):
-                if hasattr(hf, attr):
-                    setattr(hf, attr, "")
-            for attr in ("differentFirst", "differentOddEven"):
-                if hasattr(hf, attr):
-                    setattr(hf, attr, False)
-            for part in ("oddHeader", "oddFooter", "evenHeader", "evenFooter",
-                         "firstHeader", "firstFooter"):
-                obj = getattr(hf, part, None)
-                if obj is not None:
-                    for side in ("left", "center", "right"):
-                        try:
-                            setattr(obj, side, "")
-                        except Exception:
-                            pass
-        wb.save(tmp_path)
-    except Exception:
-        pass
-    return tmp_path
 
 # ========= Fechas en español (sin locale) =========
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -173,24 +134,3 @@ def generar_pagare_word(venta: Venta, plantilla_path: str) -> str:
     doc.save(salida_path)
     return salida_path
 
-def generar_pagare_excel(venta: Venta) -> str:
-    plantilla_path = "plantillas/pagare_excel.xlsx"
-    # Usar copia "sanitizada" para evitar header/footer raros
-    plantilla_limpia = _sanitizar_xlsx_origen(plantilla_path)
-
-    datos = preparar_datos_pagare(venta)
-    wb = load_workbook(plantilla_limpia, data_only=False)
-    ws = wb.active
-
-    for row in ws.iter_rows():
-            for cell in row:
-                val = cell.value
-                if isinstance(val, str):
-                    for key, v in datos.items():
-                        token = f"{{{{{key}}}}}"
-                        val = val.replace(token, str(v))
-                    cell.value = val
-
-    salida_path = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx").name
-    wb.save(salida_path)
-    return salida_path

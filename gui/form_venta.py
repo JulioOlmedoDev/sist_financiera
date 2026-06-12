@@ -14,8 +14,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 import os
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
-from utils.generador_contrato import generar_contrato_word, generar_contrato_excel
-from utils.generador_pagare import generar_pagare_word, generar_pagare_excel
+from utils.pdf_utils import generar_docs_word, generar_docs_pdf
 from sqlalchemy import desc
 
 
@@ -774,8 +773,8 @@ class FormVenta(QWidget):
                 dlg.setMinimumWidth(300)
                 layout = QHBoxLayout(dlg)
                 btn_word = QPushButton("Word")
-                btn_excel = QPushButton("Excel")
-                layout.addWidget(btn_word); layout.addWidget(btn_excel)
+                btn_pdf = QPushButton("PDF")
+                layout.addWidget(btn_word); layout.addWidget(btn_pdf)
                 btn_cancel = QDialogButtonBox(QDialogButtonBox.Close)
                 btn_cancel.rejected.connect(dlg.reject)
                 layout.addWidget(btn_cancel)
@@ -785,21 +784,27 @@ class FormVenta(QWidget):
                     else: os.system(f"xdg-open '{path}'")
 
                 def on_word():
-                    path_c = generar_contrato_word(venta, "plantillas/plantilla_contrato_mutuo.docx")
-                    path_p = generar_pagare_word(venta, "plantillas/plantilla_pagare_con_garante.docx")
+                    try:
+                        path_c, path_p = generar_docs_word(venta)
+                    except Exception as e:
+                        QMessageBox.critical(dlg, "Error al generar Word", str(e))
+                        return
                     for p in (path_c, path_p):
                         if os.path.exists(p): open_file(p)
                     dlg.accept()
 
-                def on_excel():
-                    path_c = generar_contrato_excel(venta)
-                    path_p = generar_pagare_excel(venta)
-                    for p in (path_c, path_p):
+                def on_pdf():
+                    try:
+                        pdf_c, pdf_p = generar_docs_pdf(venta)
+                    except Exception as e:
+                        QMessageBox.critical(dlg, "Error al generar PDF", str(e))
+                        return
+                    for p in (pdf_c, pdf_p):
                         if os.path.exists(p): open_file(p)
                     dlg.accept()
 
                 btn_word.clicked.connect(on_word)
-                btn_excel.clicked.connect(on_excel)
+                btn_pdf.clicked.connect(on_pdf)
                 dlg.exec()
 
             self.close(); self.sale_saved.emit()

@@ -9,8 +9,7 @@ from database import get_session
 from models import Venta, Cobro, Cliente
 from sqlalchemy.orm import joinedload
 from gui.form_venta import FormVenta
-from utils.generador_contrato import generar_contrato_word, generar_contrato_excel
-from utils.generador_pagare import generar_pagare_word, generar_pagare_excel
+from utils.pdf_utils import generar_docs_word, generar_docs_pdf
 from utils.permisos import tiene_permiso_match
 import os
 import platform
@@ -318,9 +317,9 @@ class FormVentas(QWidget):
         vbox.addWidget(QLabel("¿En qué formato querés generar y abrir los documentos?"))
         hbox = QHBoxLayout()
         btn_word = QPushButton("Word")
-        btn_excel = QPushButton("Excel")
+        btn_pdf = QPushButton("PDF")
         hbox.addWidget(btn_word)
-        hbox.addWidget(btn_excel)
+        hbox.addWidget(btn_pdf)
         vbox.addLayout(hbox)
         btn_cancel = QDialogButtonBox(QDialogButtonBox.Cancel)
         vbox.addWidget(btn_cancel)
@@ -328,49 +327,29 @@ class FormVentas(QWidget):
         btn_cancel.rejected.connect(dlg.reject)
 
         def abrir_word():
-            plantilla_c = "plantillas/plantilla_contrato_mutuo.docx"
-            plantilla_p = "plantillas/plantilla_pagare_con_garante.docx"
-
-            # Validar plantillas
-            faltan = [p for p in (plantilla_c, plantilla_p) if not os.path.exists(p)]
-            if faltan:
-                QMessageBox.critical(self, "Plantillas faltantes",
-                                     "No se encontraron estas plantillas:\n- " + "\n- ".join(faltan))
-                return
-
             try:
-                path_c = generar_contrato_word(venta, plantilla_c)
-                path_p = generar_pagare_word(venta, plantilla_p)
+                path_c, path_p = generar_docs_word(venta)
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"No se pudieron generar los documentos Word:\n{e}")
+                QMessageBox.critical(self, "Error al generar Word", str(e))
                 return
-
-            abiertos = 0
-            for p in (path_c, path_p):
-                if self._open_file(p):
-                    abiertos += 1
+            abiertos = sum(1 for p in (path_c, path_p) if self._open_file(p))
             if abiertos == 0:
-                QMessageBox.warning(self, "Aviso", "Se generaron los documentos, pero no se pudieron abrir automáticamente.")
+                QMessageBox.warning(self, "Aviso", "Generados, pero no se pudieron abrir automáticamente.")
             dlg.accept()
 
-        def abrir_excel():
+        def abrir_pdf():
             try:
-                path_c = generar_contrato_excel(venta)
-                path_p = generar_pagare_excel(venta)
+                pdf_c, pdf_p = generar_docs_pdf(venta)
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"No se pudieron generar los documentos Excel:\n{e}")
+                QMessageBox.critical(self, "Error al generar PDF", str(e))
                 return
-
-            abiertos = 0
-            for p in (path_c, path_p):
-                if self._open_file(p):
-                    abiertos += 1
+            abiertos = sum(1 for p in (pdf_c, pdf_p) if self._open_file(p))
             if abiertos == 0:
-                QMessageBox.warning(self, "Aviso", "Se generaron los documentos, pero no se pudieron abrir automáticamente.")
+                QMessageBox.warning(self, "Aviso", "PDF generados, pero no se pudieron abrir automáticamente.")
             dlg.accept()
 
         btn_word.clicked.connect(abrir_word)
-        btn_excel.clicked.connect(abrir_excel)
+        btn_pdf.clicked.connect(abrir_pdf)
 
         dlg.exec()
 
