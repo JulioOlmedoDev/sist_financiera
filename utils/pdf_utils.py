@@ -4,8 +4,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-PLANTILLA_CONTRATO = "plantillas/plantilla_contrato_mutuo.docx"
-PLANTILLA_PAGARE   = "plantillas/plantilla_pagare_con_garante.docx"
+PLANTILLA_CONTRATO         = "plantillas/plantilla_contrato_mutuo.docx"
+PLANTILLA_PAGARE           = "plantillas/plantilla_pagare_con_garante.docx"
+PLANTILLA_PAGARE_SIN_GARANTE = "plantillas/plantilla_pagare_sin_garante.docx"
 
 
 def _encontrar_soffice() -> str | None:
@@ -58,12 +59,13 @@ def generar_docs_word(venta) -> tuple[str, str]:
     from utils.generador_contrato import generar_contrato_word
     from utils.generador_pagare import generar_pagare_word
 
-    faltan = [p for p in (PLANTILLA_CONTRATO, PLANTILLA_PAGARE) if not os.path.exists(p)]
+    plantilla_pagare = PLANTILLA_PAGARE if venta.garante else PLANTILLA_PAGARE_SIN_GARANTE
+    faltan = [p for p in (PLANTILLA_CONTRATO, plantilla_pagare) if not os.path.exists(p)]
     if faltan:
         raise FileNotFoundError("Plantillas no encontradas:\n- " + "\n- ".join(faltan))
     return (
         generar_contrato_word(venta, PLANTILLA_CONTRATO),
-        generar_pagare_word(venta, PLANTILLA_PAGARE),
+        generar_pagare_word(venta, plantilla_pagare),
     )
 
 

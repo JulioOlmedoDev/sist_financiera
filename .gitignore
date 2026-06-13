@@ -23,9 +23,8 @@ desktop.ini
 *.docx
 *.xlsx
 
-# Plantillas
-plantillas/*.docx
-plantillas/*.xlsx
+# Plantillas (.docx: son parte de la app y se versionan)
+!plantillas/*.docx
 
 # Archivos de log o debug
 *.log
