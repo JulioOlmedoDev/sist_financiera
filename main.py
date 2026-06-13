@@ -9,6 +9,15 @@ from models import Usuario, Base, engine
 import sys
 
 app = QApplication(sys.argv)
+app.setStyleSheet("""
+    QComboBox QAbstractItemView {
+        background-color: white;
+        border: 1px solid #bdbdbd;
+        selection-background-color: #ffe0b2;
+        selection-color: #424242;
+        padding: 4px;
+    }
+""")
 ventana_principal = None  # Para que no se destruya la ventana principal
 login_window = None       # <- NUEVO: referencia al login para poder cerrarlo al loguear
 
