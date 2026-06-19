@@ -1,3 +1,4 @@
+import re
 from PySide6.QtWidgets import (
     QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton, QComboBox,
     QDateEdit, QMessageBox, QScrollArea, QGridLayout, QSizePolicy, QHBoxLayout
@@ -68,7 +69,7 @@ class FormPersonal(QWidget):
             ("Email", "email", False),
             ("CUIL", "cuil", True),
             ("Fecha de ingreso", "fecha_ingreso", True, "date"),
-            ("Tipo", "tipo", True, "combo", ["Coordinador", "Vendedor", "Cobrador"]),
+            ("Cargo", "tipo", True, "combo", ["Gerente", "Coordinador", "Administrativo", "Vendedor", "Cobrador"]),
         ]
 
         grid = QGridLayout()
@@ -89,6 +90,7 @@ class FormPersonal(QWidget):
             elif tipo and tipo[0] == "date":
                 input_widget = QDateEdit()
                 input_widget.setCalendarPopup(True)
+                input_widget.setDisplayFormat("dd/MM/yyyy")
                 input_widget.setDate(QDate.currentDate())
                 input_widget.setFocusPolicy(Qt.StrongFocus)
                 input_widget.wheelEvent = lambda e: None
@@ -100,9 +102,7 @@ class FormPersonal(QWidget):
                 elif key.startswith("celular"):
                     input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("^[0-9+\\-\\s]+$")))
                 elif key == "cuil":
-                    regex_cuil = QRegularExpression("^[0-9]{2}-[0-9]{7,8}-[0-9]{1}$")
-                    input_widget.setValidator(QRegularExpressionValidator(regex_cuil))
-                    input_widget.setPlaceholderText("Ej: 20-12345678-3")
+                    input_widget.setInputMask("00-00000000-0;_")
 
             input_widget.setMinimumHeight(30)
             input_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -110,6 +110,9 @@ class FormPersonal(QWidget):
             grid.addWidget(input_widget, row, col * 2 + 1)
             self.campos[key] = input_widget
 
+
+        self.campos["fecha_nacimiento"].setMinimumDate(QDate(1900, 1, 1))
+        self.campos["fecha_nacimiento"].setMaximumDate(QDate.currentDate())
 
         layout.addLayout(grid)
 
@@ -223,6 +226,25 @@ class FormPersonal(QWidget):
             elif isinstance(widget, QDateEdit) and not widget.date().isValid():
                 widget.setStyleSheet("border: 2px solid red;")
                 return self.mostrar_alerta(campo)
+
+        email_widget = self.campos.get("email")
+        email_text = email_widget.text().strip()
+        if email_text:
+            patron = r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$'
+            if not re.match(patron, email_text):
+                email_widget.setStyleSheet("border: 2px solid red;")
+                QMessageBox.warning(self, "Email inválido",
+                    "El email ingresado no es válido. Usá el formato nombre@dominio.com.")
+                email_widget.setFocus()
+                return
+
+        cuil_widget = self.campos["cuil"]
+        if "_" in cuil_widget.text():
+            cuil_widget.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "CUIL incompleto",
+                "Completá todos los dígitos del CUIL. Formato: 00-00000000-0.")
+            cuil_widget.setFocus()
+            return
 
         try:
             with get_session() as session:

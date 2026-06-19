@@ -1,3 +1,4 @@
+import re
 from PySide6.QtWidgets import (
     QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton, QScrollArea,
     QGridLayout, QSizePolicy, QTextEdit, QHBoxLayout, QMessageBox
@@ -65,6 +66,9 @@ class FormCliente(QWidget):
             elif tipo and tipo[0] == "date":
                 input_widget = DateEditSinScroll()
                 input_widget.setCalendarPopup(True)
+                input_widget.setDisplayFormat("dd/MM/yyyy")
+                input_widget.setMinimumDate(QDate(1900, 1, 1))
+                input_widget.setMaximumDate(QDate.currentDate())
                 input_widget.setDate(QDate.currentDate())
             else:
                 input_widget = QLineEdit()
@@ -190,6 +194,17 @@ class FormCliente(QWidget):
             elif isinstance(widget, DateEditSinScroll) and not widget.date().isValid():
                 widget.setStyleSheet("border: 2px solid red;")
                 return self.mostrar_alerta(campo)
+
+        email_widget = self.campos.get("email")
+        email_text = email_widget.text().strip()
+        if email_text:
+            patron = r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$'
+            if not re.match(patron, email_text):
+                email_widget.setStyleSheet("border: 2px solid red;")
+                QMessageBox.warning(self, "Email inválido",
+                    "El email ingresado no es válido. Usá el formato nombre@dominio.com.")
+                email_widget.setFocus()
+                return
 
         try:
             with get_session() as session:

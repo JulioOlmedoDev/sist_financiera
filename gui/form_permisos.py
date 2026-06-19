@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QPushButton, QMessageBox, QScrollArea,
     QSizePolicy, QGroupBox, QGridLayout
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from collections import defaultdict, OrderedDict
 from database import get_session
 from models import Usuario, Permiso, Rol
@@ -80,6 +80,8 @@ PLANTILLAS = {
 }
 
 class FormPermisos(QWidget):
+    permisos_guardados = Signal()
+
     def __init__(self, usuario=None):
         super().__init__()
 
@@ -349,4 +351,5 @@ class FormPermisos(QWidget):
             return
 
         QMessageBox.information(self, "Éxito", "Permisos actualizados correctamente.")
+        self.permisos_guardados.emit()
         self.close()

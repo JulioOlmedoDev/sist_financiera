@@ -782,10 +782,14 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(FormPersonal(usuario=self.usuario), "Gestión de Personal")
 
     def abrir_form_usuario(self):
-        self.mostrar_formulario(FormUsuario(usuario=self.usuario), "Gestión de Usuarios")
+        formulario = FormUsuario(usuario=self.usuario)
+        formulario.usuario_guardado.connect(self.abrir_listado_usuarios)
+        self.mostrar_formulario(formulario, "Gestión de Usuarios")
 
     def abrir_form_permisos(self):
-        self.mostrar_formulario(FormPermisos(usuario=self.usuario), "Gestión de Permisos")
+        formulario = FormPermisos(usuario=self.usuario)
+        formulario.permisos_guardados.connect(self.abrir_gestion_personal)
+        self.mostrar_formulario(formulario, "Gestión de Permisos")
 
     def abrir_form_consultas(self):
         self.mostrar_formulario(FormConsultas(), "Consultas Generales")
