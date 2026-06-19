@@ -8,7 +8,7 @@ from database import get_session
 from models import Usuario, Personal
 from utils.permisos import tiene_permiso, es_admin
 from datetime import datetime
-import hashlib
+from gui.login_form import _hash_new
 
 
 class FormRecuperarAcceso(QWidget):
@@ -164,9 +164,11 @@ class FormRecuperarAcceso(QWidget):
                 if not user:
                     QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
                     return
-                user.password = hashlib.sha256(nueva.encode()).hexdigest()
+                user.password = _hash_new(nueva)
                 user.must_change_password = True
                 user.last_password_change = datetime.now()
+                user.failed_attempts = 0
+                user.lock_until = None
                 session.commit()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))

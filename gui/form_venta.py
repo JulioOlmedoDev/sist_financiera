@@ -575,6 +575,8 @@ class FormVenta(QWidget):
                                 ("Vendedor", self.vendedor_combo),
                                 ("Cobrador", self.cobrador_combo)]:
                 combo.clear()
+                if combo is not self.vendedor_combo:
+                    combo.addItem("Sin asignar", None)
                 for per in session.query(Personal).filter_by(tipo=tipo).all():
                     combo.addItem(per.nombres, userData=per.id)
 
@@ -669,10 +671,8 @@ class FormVenta(QWidget):
             if not self.plan_pago_combo.currentText():
                 QMessageBox.warning(self, "Dato requerido", "Seleccioná un plan de pago."); return
 
-            if self.coordinador_combo.currentData() is None or \
-            self.vendedor_combo.currentData() is None or \
-            self.cobrador_combo.currentData() is None:
-                QMessageBox.warning(self, "Dato requerido", "Seleccioná coordinador, vendedor y cobrador."); return
+            if self.vendedor_combo.currentData() is None:
+                QMessageBox.warning(self, "Dato requerido", "Seleccioná un vendedor."); return
 
             if self.monto_input.value() <= 0:
                 QMessageBox.warning(self, "Dato requerido", "El monto debe ser mayor que 0."); return

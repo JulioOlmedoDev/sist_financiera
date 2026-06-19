@@ -235,9 +235,9 @@ class FormVentas(QWidget):
             msg_parts.append(f"<b>Monto:</b> ${v.monto:,.2f}")
             msg_parts.append(f"<b>Cuotas:</b> {v.num_cuotas} x ${v.valor_cuota:,.2f}")
             msg_parts.append(
-                f"<b>Personal:</b> Coordinador: {v.coordinador.nombres if v.coordinador else ''} / "
+                f"<b>Personal:</b> Coordinador: {v.coordinador.nombres if v.coordinador else 'Sin asignar'} / "
                 f"Vendedor: {v.vendedor.nombres if v.vendedor else ''} / "
-                f"Cobrador: {v.cobrador.nombres if v.cobrador else ''}"
+                f"Cobrador: {v.cobrador.nombres if v.cobrador else 'Sin asignar'}"
             )
 
             if v.creada_por:
