@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QRegularExpression, Signal
 from datetime import date
 from PySide6.QtGui import QRegularExpressionValidator
 
+from sqlalchemy.exc import IntegrityError
 from database import get_session
 from models import Personal
 from utils.permisos import es_admin, tiene_permiso
@@ -69,7 +70,7 @@ class FormPersonal(QWidget):
             ("Celular personal", "celular_personal", True),
             ("Celular alternativo", "celular_alternativo", False),
             ("Email", "email", False),
-            ("CUIL", "cuil", True),
+            ("CUIL", "cuil", False),
             ("Fecha de ingreso", "fecha_ingreso", True, "date"),
             ("Cargo", "tipo", True, "combo", ["Gerente", "Coordinador", "Administrativo", "Vendedor", "Cobrador"]),
         ]
@@ -196,6 +197,8 @@ class FormPersonal(QWidget):
                 value = getattr(personal, key, "")
                 if key in ("fecha_nacimiento", "fecha_ingreso"):
                     widget.setText(value.strftime("%d/%m/%Y") if value else "")
+                elif key == "cuil":
+                    widget.setText(value if value and re.fullmatch(r'\d{2}-\d{8}-\d', str(value)) else "")
                 elif isinstance(widget, QLineEdit):
                     widget.setText(value or "")
                 elif isinstance(widget, QComboBox):
@@ -206,7 +209,7 @@ class FormPersonal(QWidget):
             "apellidos", "nombres", "dni",
             "domicilio_personal", "localidad", "provincia",
             "sexo", "estado_civil", "celular_personal",
-            "cuil", "tipo"
+            "tipo"
         ]
 
         for campo in campos_requeridos:
@@ -275,12 +278,15 @@ class FormPersonal(QWidget):
                 return
 
         cuil_widget = self.campos["cuil"]
-        if not cuil_widget.hasAcceptableInput():
-            cuil_widget.setStyleSheet("border: 2px solid red;")
-            QMessageBox.warning(self, "CUIL incompleto",
-                "Completá todos los dígitos del CUIL. Formato: 00-00000000-0.")
-            cuil_widget.setFocus()
-            return
+        cuil_widget.setStyleSheet("")
+        cuil_digitos = re.sub(r'\D', '', cuil_widget.text())
+        if cuil_digitos:
+            if not re.fullmatch(r'\d{2}-\d{8}-\d', cuil_widget.text()):
+                cuil_widget.setStyleSheet("border: 2px solid red;")
+                QMessageBox.warning(self, "CUIL inválido",
+                    "El CUIL no respeta el formato. Debe ser XX-XXXXXXXX-X (ej. 20-12345678-9).")
+                cuil_widget.setFocus()
+                return
 
         try:
             with get_session() as session:
@@ -288,6 +294,9 @@ class FormPersonal(QWidget):
                 for key, widget in self.campos.items():
                     if key in ("fecha_nacimiento", "fecha_ingreso"):
                         setattr(personal, key, parsear_fecha(widget.text()))
+                    elif key == "cuil":
+                        digitos = re.sub(r'\D', '', widget.text())
+                        setattr(personal, key, widget.text() if digitos else None)
                     elif isinstance(widget, QLineEdit):
                         setattr(personal, key, widget.text())
                     elif isinstance(widget, QComboBox):
@@ -300,6 +309,12 @@ class FormPersonal(QWidget):
             QMessageBox.information(self, "Éxito", f"Personal {'actualizado' if self.editando else 'guardado'} correctamente")
             self.personal_guardado.emit()
             self.close()
+        except IntegrityError as e:
+            if "dni" in str(e).lower():
+                QMessageBox.critical(self, "DNI duplicado",
+                    "Ya existe un registro de personal con ese DNI.")
+            else:
+                QMessageBox.critical(self, "Error", f"No se pudo guardar el personal:\n{e}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo guardar el personal:\n{e}")
 
