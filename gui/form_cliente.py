@@ -8,6 +8,7 @@ from datetime import date
 from PySide6.QtGui import QRegularExpressionValidator
 
 from utils.widgets_custom import ComboBoxSinScroll, parsear_fecha
+from sqlalchemy.exc import IntegrityError
 from database import get_session
 from models import Cliente
 
@@ -249,6 +250,12 @@ class FormCliente(QWidget):
                 self.close()
             else:
                 self.limpiar_formulario()
+        except IntegrityError as e:
+            if "dni" in str(e).lower():
+                QMessageBox.critical(self, "DNI duplicado",
+                    "Ya existe un cliente con ese DNI.")
+            else:
+                QMessageBox.critical(self, "Error", f"No se pudo guardar el cliente:\n{e}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo guardar el cliente:\n{e}")
 
