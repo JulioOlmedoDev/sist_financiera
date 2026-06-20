@@ -3,10 +3,11 @@ from PySide6.QtWidgets import (
     QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton, QScrollArea,
     QGridLayout, QSizePolicy, QTextEdit, QHBoxLayout, QMessageBox
 )
-from PySide6.QtCore import QDate, Qt, QRegularExpression, Signal
+from PySide6.QtCore import Qt, QRegularExpression, Signal
+from datetime import date
 from PySide6.QtGui import QRegularExpressionValidator
 
-from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
+from utils.widgets_custom import ComboBoxSinScroll, parsear_fecha
 from database import get_session
 from models import Cliente
 
@@ -64,12 +65,8 @@ class FormCliente(QWidget):
                 input_widget = ComboBoxSinScroll()
                 input_widget.addItems(tipo[1])
             elif tipo and tipo[0] == "date":
-                input_widget = DateEditSinScroll()
-                input_widget.setCalendarPopup(True)
-                input_widget.setDisplayFormat("dd/MM/yyyy")
-                input_widget.setMinimumDate(QDate(1900, 1, 1))
-                input_widget.setMaximumDate(QDate.currentDate())
-                input_widget.setDate(QDate.currentDate())
+                input_widget = QLineEdit()
+                input_widget.setInputMask("00/00/0000;_")
             else:
                 input_widget = QLineEdit()
                 if key == "dni":
@@ -136,7 +133,7 @@ class FormCliente(QWidget):
             QLabel {
                 font-weight: bold;
             }
-            QLineEdit, QComboBox, QDateEdit, QTextEdit {
+            QLineEdit, QComboBox, QTextEdit {
                 padding: 6px;
                 border: 1px solid #ccc;
                 border-radius: 4px;
@@ -168,16 +165,16 @@ class FormCliente(QWidget):
                 return
             for key, widget in self.campos.items():
                 value = getattr(cliente, key, "")
-                if isinstance(widget, QLineEdit):
+                if key == "fecha_nacimiento":
+                    widget.setText(value.strftime("%d/%m/%Y") if value else "")
+                elif isinstance(widget, QLineEdit):
                     widget.setText(value or "")
                 elif isinstance(widget, ComboBoxSinScroll):
                     widget.setCurrentText(value or "")
-                elif isinstance(widget, DateEditSinScroll):
-                    widget.setDate(value or QDate.currentDate())
 
     def guardar_cliente(self):
         campos_requeridos = [
-            "apellidos", "nombres", "dni", "fecha_nacimiento",
+            "apellidos", "nombres", "dni",
             "domicilio_personal", "localidad", "provincia",
             "sexo", "estado_civil", "celular_personal"
         ]
@@ -191,9 +188,34 @@ class FormCliente(QWidget):
             elif isinstance(widget, ComboBoxSinScroll) and not widget.currentText().strip():
                 widget.setStyleSheet("border: 2px solid red;")
                 return self.mostrar_alerta(campo)
-            elif isinstance(widget, DateEditSinScroll) and not widget.date().isValid():
-                widget.setStyleSheet("border: 2px solid red;")
-                return self.mostrar_alerta(campo)
+
+        fecha_nac_w = self.campos["fecha_nacimiento"]
+        fecha_nac_w.setStyleSheet("")
+        if not fecha_nac_w.hasAcceptableInput():
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Campo requerido",
+                "Ingresá la fecha de nacimiento completa en formato dd/mm/aaaa.")
+            fecha_nac_w.setFocus()
+            return
+        fecha_nac = parsear_fecha(fecha_nac_w.text())
+        if not fecha_nac:
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no existe. Verificá día y mes (por ej. no existe el 31/02).")
+            fecha_nac_w.setFocus()
+            return
+        if fecha_nac >= date.today():
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no puede ser la fecha de hoy ni futura.")
+            fecha_nac_w.setFocus()
+            return
+        if fecha_nac.year < 1900:
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no puede ser anterior a 1900.")
+            fecha_nac_w.setFocus()
+            return
 
         email_widget = self.campos.get("email")
         email_text = email_widget.text().strip()
@@ -210,12 +232,12 @@ class FormCliente(QWidget):
             with get_session() as session:
                 cliente = session.query(Cliente).get(self.cliente_id) if self.editando else Cliente()
                 for key, widget in self.campos.items():
-                    if isinstance(widget, QLineEdit):
+                    if key == "fecha_nacimiento":
+                        setattr(cliente, key, parsear_fecha(widget.text()))
+                    elif isinstance(widget, QLineEdit):
                         setattr(cliente, key, widget.text())
                     elif isinstance(widget, ComboBoxSinScroll):
                         setattr(cliente, key, widget.currentText())
-                    elif isinstance(widget, DateEditSinScroll):
-                        setattr(cliente, key, widget.date().toPython())
 
                 if not self.editando:
                     session.add(cliente)
@@ -254,8 +276,6 @@ class FormCliente(QWidget):
                 widget.clear()
             elif isinstance(widget, ComboBoxSinScroll):
                 widget.setCurrentIndex(0)
-            elif isinstance(widget, DateEditSinScroll):
-                widget.setDate(QDate.currentDate())
             widget.setStyleSheet("")
 
     def cancelar_formulario(self):

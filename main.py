@@ -9,6 +9,7 @@ from models import Usuario, Base, engine
 import sys
 
 app = QApplication(sys.argv)
+
 app.setStyleSheet("""
     QComboBox QAbstractItemView {
         background-color: white;

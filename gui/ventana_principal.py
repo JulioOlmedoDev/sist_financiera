@@ -779,7 +779,9 @@ class VentanaPrincipal(QMainWindow):
         self.abrir_listado_productos()
 
     def abrir_form_personal(self):
-        self.mostrar_formulario(FormPersonal(usuario=self.usuario), "Gestión de Personal")
+        formulario = FormPersonal(usuario=self.usuario)
+        formulario.personal_guardado.connect(self.abrir_gestion_personal)
+        self.mostrar_formulario(formulario, "Gestión de Personal")
 
     def abrir_form_usuario(self):
         formulario = FormUsuario(usuario=self.usuario)

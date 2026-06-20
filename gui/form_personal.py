@@ -1,14 +1,16 @@
 import re
 from PySide6.QtWidgets import (
     QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton, QComboBox,
-    QDateEdit, QMessageBox, QScrollArea, QGridLayout, QSizePolicy, QHBoxLayout
+    QMessageBox, QScrollArea, QGridLayout, QSizePolicy, QHBoxLayout
 )
-from PySide6.QtCore import QDate, Qt, QRegularExpression, Signal
+from PySide6.QtCore import Qt, QRegularExpression, Signal
+from datetime import date
 from PySide6.QtGui import QRegularExpressionValidator
 
 from database import get_session
 from models import Personal
 from utils.permisos import es_admin, tiene_permiso
+from utils.widgets_custom import parsear_fecha
 
 class FormPersonal(QWidget):
     personal_guardado = Signal()
@@ -88,12 +90,8 @@ class FormPersonal(QWidget):
                 input_widget.wheelEvent = lambda e: None
 
             elif tipo and tipo[0] == "date":
-                input_widget = QDateEdit()
-                input_widget.setCalendarPopup(True)
-                input_widget.setDisplayFormat("dd/MM/yyyy")
-                input_widget.setDate(QDate.currentDate())
-                input_widget.setFocusPolicy(Qt.StrongFocus)
-                input_widget.wheelEvent = lambda e: None
+                input_widget = QLineEdit()
+                input_widget.setInputMask("00/00/0000;_")
 
             else:
                 input_widget = QLineEdit()
@@ -110,9 +108,6 @@ class FormPersonal(QWidget):
             grid.addWidget(input_widget, row, col * 2 + 1)
             self.campos[key] = input_widget
 
-
-        self.campos["fecha_nacimiento"].setMinimumDate(QDate(1900, 1, 1))
-        self.campos["fecha_nacimiento"].setMaximumDate(QDate.currentDate())
 
         layout.addLayout(grid)
 
@@ -167,7 +162,7 @@ class FormPersonal(QWidget):
             QLabel {
                 font-weight: bold;
             }
-            QLineEdit, QComboBox, QDateEdit {
+            QLineEdit, QComboBox {
                 padding: 6px;
                 border: 1px solid #ccc;
                 border-radius: 4px;
@@ -199,19 +194,19 @@ class FormPersonal(QWidget):
                 return
             for key, widget in self.campos.items():
                 value = getattr(personal, key, "")
-                if isinstance(widget, QLineEdit):
+                if key in ("fecha_nacimiento", "fecha_ingreso"):
+                    widget.setText(value.strftime("%d/%m/%Y") if value else "")
+                elif isinstance(widget, QLineEdit):
                     widget.setText(value or "")
                 elif isinstance(widget, QComboBox):
                     widget.setCurrentText(value or "")
-                elif isinstance(widget, QDateEdit):
-                    widget.setDate(value or QDate.currentDate())
 
     def guardar_personal(self):
         campos_requeridos = [
-            "apellidos", "nombres", "dni", "fecha_nacimiento",
+            "apellidos", "nombres", "dni",
             "domicilio_personal", "localidad", "provincia",
             "sexo", "estado_civil", "celular_personal",
-            "cuil", "fecha_ingreso", "tipo"
+            "cuil", "tipo"
         ]
 
         for campo in campos_requeridos:
@@ -223,9 +218,50 @@ class FormPersonal(QWidget):
             elif isinstance(widget, QComboBox) and not widget.currentText().strip():
                 widget.setStyleSheet("border: 2px solid red;")
                 return self.mostrar_alerta(campo)
-            elif isinstance(widget, QDateEdit) and not widget.date().isValid():
-                widget.setStyleSheet("border: 2px solid red;")
-                return self.mostrar_alerta(campo)
+
+        fecha_nac_w = self.campos["fecha_nacimiento"]
+        fecha_nac_w.setStyleSheet("")
+        if not fecha_nac_w.hasAcceptableInput():
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Campo requerido",
+                "Ingresá la fecha de nacimiento completa en formato dd/mm/aaaa.")
+            fecha_nac_w.setFocus()
+            return
+        fecha_nac = parsear_fecha(fecha_nac_w.text())
+        if not fecha_nac:
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no existe. Verificá día y mes (por ej. no existe el 31/02).")
+            fecha_nac_w.setFocus()
+            return
+        if fecha_nac >= date.today():
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no puede ser la fecha de hoy ni futura.")
+            fecha_nac_w.setFocus()
+            return
+        if fecha_nac.year < 1900:
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no puede ser anterior a 1900.")
+            fecha_nac_w.setFocus()
+            return
+
+        fecha_ing_w = self.campos["fecha_ingreso"]
+        fecha_ing_w.setStyleSheet("")
+        if not fecha_ing_w.hasAcceptableInput():
+            fecha_ing_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Campo requerido",
+                "Ingresá la fecha de ingreso completa en formato dd/mm/aaaa.")
+            fecha_ing_w.setFocus()
+            return
+        fecha_ing = parsear_fecha(fecha_ing_w.text())
+        if not fecha_ing:
+            fecha_ing_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de ingreso no existe. Verificá día y mes.")
+            fecha_ing_w.setFocus()
+            return
 
         email_widget = self.campos.get("email")
         email_text = email_widget.text().strip()
@@ -239,7 +275,7 @@ class FormPersonal(QWidget):
                 return
 
         cuil_widget = self.campos["cuil"]
-        if "_" in cuil_widget.text():
+        if not cuil_widget.hasAcceptableInput():
             cuil_widget.setStyleSheet("border: 2px solid red;")
             QMessageBox.warning(self, "CUIL incompleto",
                 "Completá todos los dígitos del CUIL. Formato: 00-00000000-0.")
@@ -250,12 +286,12 @@ class FormPersonal(QWidget):
             with get_session() as session:
                 personal = session.query(Personal).get(self.personal_id) if self.editando else Personal()
                 for key, widget in self.campos.items():
-                    if isinstance(widget, QLineEdit):
+                    if key in ("fecha_nacimiento", "fecha_ingreso"):
+                        setattr(personal, key, parsear_fecha(widget.text()))
+                    elif isinstance(widget, QLineEdit):
                         setattr(personal, key, widget.text())
                     elif isinstance(widget, QComboBox):
                         setattr(personal, key, widget.currentText())
-                    elif isinstance(widget, QDateEdit):
-                        setattr(personal, key, widget.date().toPython())
 
                 if not self.editando:
                     session.add(personal)

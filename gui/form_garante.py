@@ -3,10 +3,11 @@ from PySide6.QtWidgets import (
     QWidget, QLabel, QLineEdit, QVBoxLayout, QPushButton, QScrollArea,
     QGridLayout, QSizePolicy, QTextEdit, QHBoxLayout, QMessageBox
 )
-from PySide6.QtCore import QDate, Qt, QRegularExpression, Signal
+from PySide6.QtCore import Qt, QRegularExpression, Signal
+from datetime import date
 from PySide6.QtGui import QRegularExpressionValidator
 
-from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
+from utils.widgets_custom import ComboBoxSinScroll, parsear_fecha
 from database import get_session
 from models import Garante
 
@@ -62,12 +63,8 @@ class FormGarante(QWidget):
                 input_widget = ComboBoxSinScroll()
                 input_widget.addItems(tipo[1])
             elif tipo and tipo[0] == "date":
-                input_widget = DateEditSinScroll()
-                input_widget.setCalendarPopup(True)
-                input_widget.setDisplayFormat("dd/MM/yyyy")
-                input_widget.setMinimumDate(QDate(1900, 1, 1))
-                input_widget.setMaximumDate(QDate.currentDate())
-                input_widget.setDate(QDate.currentDate())
+                input_widget = QLineEdit()
+                input_widget.setInputMask("00/00/0000;_")
             else:
                 input_widget = QLineEdit()
                 if key == "dni":
@@ -135,13 +132,13 @@ class FormGarante(QWidget):
                 font-weight: bold;
                 color: #333;
             }
-            QLineEdit, QComboBox, QDateEdit, QTextEdit {
+            QLineEdit, QComboBox, QTextEdit {
                 padding: 6px;
                 border: 1px solid #ccc;
                 border-radius: 4px;
                 background-color: #fff;
             }
-            QLineEdit.error, QComboBox.error, QDateEdit.error {
+            QLineEdit.error, QComboBox.error {
                 border: 2px solid red;
             }
             QPushButton {
@@ -177,18 +174,18 @@ class FormGarante(QWidget):
                 return
             for key, widget in self.campos.items():
                 valor = getattr(garante, key, "")
-                if isinstance(widget, QLineEdit):
+                if key == "fecha_nacimiento":
+                    widget.setText(valor.strftime("%d/%m/%Y") if valor else "")
+                elif isinstance(widget, QLineEdit):
                     widget.setText(valor or "")
                 elif isinstance(widget, ComboBoxSinScroll):
                     widget.setCurrentText(valor or "")
-                elif isinstance(widget, DateEditSinScroll):
-                    widget.setDate(valor if valor else QDate.currentDate())
 
         self.btn_guardar.setText("Actualizar Garante")
 
     def guardar_garante(self):
         campos_requeridos = [
-            "apellidos", "nombres", "dni", "fecha_nacimiento",
+            "apellidos", "nombres", "dni",
             "domicilio_personal", "localidad", "provincia",
             "sexo", "estado_civil", "celular_personal"
         ]
@@ -202,9 +199,34 @@ class FormGarante(QWidget):
             elif isinstance(widget, ComboBoxSinScroll) and (widget.currentIndex() == -1 or not widget.currentText().strip()):
                 widget.setStyleSheet("border: 2px solid red;")
                 return self.mostrar_alerta(campo)
-            elif isinstance(widget, DateEditSinScroll) and not widget.date().isValid():
-                widget.setStyleSheet("border: 2px solid red;")
-                return self.mostrar_alerta(campo)
+
+        fecha_nac_w = self.campos["fecha_nacimiento"]
+        fecha_nac_w.setStyleSheet("")
+        if not fecha_nac_w.hasAcceptableInput():
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Campo requerido",
+                "Ingresá la fecha de nacimiento completa en formato dd/mm/aaaa.")
+            fecha_nac_w.setFocus()
+            return
+        fecha_nac = parsear_fecha(fecha_nac_w.text())
+        if not fecha_nac:
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no existe. Verificá día y mes (por ej. no existe el 31/02).")
+            fecha_nac_w.setFocus()
+            return
+        if fecha_nac >= date.today():
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no puede ser la fecha de hoy ni futura.")
+            fecha_nac_w.setFocus()
+            return
+        if fecha_nac.year < 1900:
+            fecha_nac_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Fecha inválida",
+                "La fecha de nacimiento no puede ser anterior a 1900.")
+            fecha_nac_w.setFocus()
+            return
 
         email_widget = self.campos.get("email")
         email_text = email_widget.text().strip()
@@ -222,12 +244,12 @@ class FormGarante(QWidget):
                 garante = session.query(Garante).get(self.garante_id) if self.editando else Garante()
 
                 for key, widget in self.campos.items():
-                    if isinstance(widget, QLineEdit):
+                    if key == "fecha_nacimiento":
+                        setattr(garante, key, parsear_fecha(widget.text()))
+                    elif isinstance(widget, QLineEdit):
                         setattr(garante, key, widget.text())
                     elif isinstance(widget, ComboBoxSinScroll):
                         setattr(garante, key, widget.currentText())
-                    elif isinstance(widget, DateEditSinScroll):
-                        setattr(garante, key, widget.date().toPython())
 
                 if not self.editando:
                     session.add(garante)
@@ -268,6 +290,4 @@ class FormGarante(QWidget):
                 widget.clear()
             elif isinstance(widget, ComboBoxSinScroll):
                 widget.setCurrentIndex(0)
-            elif isinstance(widget, DateEditSinScroll):
-                widget.setDate(QDate.currentDate())
             widget.setStyleSheet("")
