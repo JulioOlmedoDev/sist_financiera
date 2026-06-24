@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QDate, Qt, Signal
 from database import get_session
 from models import Venta, Cuota, Cobro, Usuario
+from utils.formato import formato_documento
 from sqlalchemy.orm import joinedload
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll, DoubleSpinBoxSinScroll
 
@@ -108,7 +109,7 @@ class FormCobro(QWidget):
 
         lbl_buscar = QLabel("Buscar Venta:")
         self.buscador = QLineEdit()
-        self.buscador.setPlaceholderText("Apellido, DNI o #ID (ej.: Pérez · 30123456 · #125)")
+        self.buscador.setPlaceholderText("Apellido, N° doc o #ID (ej.: Pérez · 30123456 · #125)")
         self.btn_cargar_busqueda = QPushButton("Cargar")
 
         # Alturas y policies fijos
@@ -141,8 +142,8 @@ class FormCobro(QWidget):
             cli = v.cliente
             ap = (cli.apellidos or "").strip()
             no = (cli.nombres or "").strip()
-            dni = (cli.dni or "").strip()
-            display = f"Venta #{v.id} – {ap}, {no}" + (f" (DNI {dni})" if dni else "")
+            doc = formato_documento(cli)
+            display = f"Venta #{v.id} – {ap}, {no}" + (f" ({doc})" if doc else "")
             self._display_map[self._normalize(display)] = v.id
             opciones.append(display)
         self._completer = QCompleter(opciones, self)
@@ -177,7 +178,8 @@ class FormCobro(QWidget):
         # Si vino con venta_id, mostrar en el buscador
         if self.venta:
             cli = self.venta.cliente
-            self.buscador.setText(f"Venta #{self.venta.id} – {cli.apellidos}, {cli.nombres}" + (f" (DNI {cli.dni})" if cli.dni else ""))
+            doc = formato_documento(cli)
+            self.buscador.setText(f"Venta #{self.venta.id} – {cli.apellidos}, {cli.nombres}" + (f" ({doc})" if doc else ""))
 
         # ===== Bloque: Título "Venta #…" =====
         self.lbl_info_venta = QLabel(self._venta_label_text())

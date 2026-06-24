@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, QTimer
 from database import get_session
 from models import Cliente
 from gui.form_cliente import FormCliente
+from utils.formato import formato_documento
 
 class FormGestionClientes(QWidget):
     def __init__(self):
@@ -24,14 +25,14 @@ class FormGestionClientes(QWidget):
 
         # Buscador
         self.buscador = QLineEdit()
-        self.buscador.setPlaceholderText("Buscar por apellido, nombre o DNI")
+        self.buscador.setPlaceholderText("Buscar por apellido, nombre o número de documento")
         self.buscador.textChanged.connect(self.filtrar_clientes)
         layout.addWidget(self.buscador)
 
         # Tabla
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(6)
-        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "DNI", "Calificación", "Acciones"])
+        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "Documento", "Calificación", "Acciones"])
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla.setAlternatingRowColors(True)
         layout.addWidget(self.tabla)
@@ -134,7 +135,7 @@ class FormGestionClientes(QWidget):
                 self.tabla.setItem(row_index, 0, QTableWidgetItem(str(cliente.id)))
                 self.tabla.setItem(row_index, 1, QTableWidgetItem(cliente.apellidos or ""))
                 self.tabla.setItem(row_index, 2, QTableWidgetItem(cliente.nombres or ""))
-                self.tabla.setItem(row_index, 3, QTableWidgetItem(cliente.dni or ""))
+                self.tabla.setItem(row_index, 3, QTableWidgetItem(formato_documento(cliente)))
                 self.tabla.setItem(row_index, 4, QTableWidgetItem(cliente.calificacion or ""))
 
                 # Botón de acción
@@ -180,7 +181,7 @@ class FormGestionClientes(QWidget):
             c for c in self.todos_los_clientes
             if (c.apellidos and texto in c.apellidos.lower()) or
                (c.nombres and texto in c.nombres.lower()) or
-               (c.dni and texto in c.dni.lower())
+               (c.nro_documento and texto in c.nro_documento.lower())
         ]
         self.mostrar_clientes(filtrados)
 

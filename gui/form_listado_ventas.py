@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QTimer
 
 from database import get_session
 from models import Venta, Cobro, Cliente
+from utils.formato import formato_documento
 from sqlalchemy.orm import joinedload
 from gui.form_venta import FormVenta
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
@@ -33,7 +34,7 @@ class FormVentas(QWidget):
 
         self.buscador = QLineEdit()
         self.buscador.setPlaceholderText(
-            "Buscar por apellido, nombre, DNI, producto o estado (activa, finalizada, anulada, mora)"
+            "Buscar por apellido, nombre, N° documento, producto o estado (activa, finalizada, anulada, mora)"
         )
         self.buscador.textChanged.connect(self.filtrar_ventas)
         layout.addWidget(self.buscador)
@@ -100,6 +101,7 @@ class FormVentas(QWidget):
                 session.query(Venta)
                 .options(
                     joinedload(Venta.cliente),
+                    joinedload(Venta.producto),
                     joinedload(Venta.cuotas),
                     joinedload(Venta.coordinador),
                     joinedload(Venta.vendedor),
@@ -120,7 +122,11 @@ class FormVentas(QWidget):
                 fecha_str = venta.fecha.strftime("%d/%m/%Y") if venta.fecha else ""
                 self.tabla.setItem(row_index, 1, QTableWidgetItem(fecha_str))
                 cliente = venta.cliente
-                cliente_str = f"{cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})" if cliente else ""
+                if cliente:
+                    doc = formato_documento(cliente)
+                    cliente_str = f"{cliente.apellidos}, {cliente.nombres}" + (f" ({doc})" if doc else "")
+                else:
+                    cliente_str = ""
                 self.tabla.setItem(row_index, 2, QTableWidgetItem(cliente_str))
                 self.tabla.setItem(row_index, 3, QTableWidgetItem(f"${venta.monto:,.2f}" if venta.monto else ""))
 
@@ -220,12 +226,16 @@ class FormVentas(QWidget):
             msg_parts.append(f"<b>ID:</b> {v.id}")
             msg_parts.append(f"<b>Fecha:</b> {v.fecha.strftime('%d/%m/%Y') if v.fecha else ''}")
             if cliente:
-                msg_parts.append(f"<b>Cliente:</b> {cliente.apellidos}, {cliente.nombres} (DNI {cliente.dni})")
+                doc_cli = formato_documento(cliente)
+                cli_str = f"{cliente.apellidos}, {cliente.nombres}" + (f" ({doc_cli})" if doc_cli else "")
+                msg_parts.append(f"<b>Cliente:</b> {cli_str}")
                 if v.finalizada and cliente.calificacion:
                     msg_parts.append(f"<b>Calificación Cliente:</b> {cliente.calificacion}")
 
             if garante:
-                fila_garante = f"<b>Garante:</b> {garante.apellidos}, {garante.nombres} (DNI {garante.dni})"
+                doc_gar = formato_documento(garante)
+                gar_str = f"{garante.apellidos}, {garante.nombres}" + (f" ({doc_gar})" if doc_gar else "")
+                fila_garante = f"<b>Garante:</b> {gar_str}"
                 if v.finalizada and garante.calificacion:
                     fila_garante += f"<br><b>Calificación Garante:</b> {garante.calificacion}"
                 msg_parts.append(fila_garante)
@@ -405,7 +415,7 @@ class FormVentas(QWidget):
                 (cli and (
                     texto in self.normalizar(cli.apellidos) or
                     texto in self.normalizar(cli.nombres) or
-                    texto in self.normalizar(cli.dni)
+                    texto in self.normalizar(cli.nro_documento)
                 )) or
                 (producto and texto in self.normalizar(producto.nombre)) or
                 (texto in self.normalizar(estado))

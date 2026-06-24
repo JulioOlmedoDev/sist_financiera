@@ -7,6 +7,7 @@ from PySide6.QtCore import QDate, Qt, QUrl
 from PySide6.QtGui import QIcon, QDesktopServices
 from database import get_session
 from models import Venta, Cliente, Producto, Categoria, Personal, Cobro
+from utils.formato import formato_documento
 from sqlalchemy.orm import joinedload
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -89,7 +90,7 @@ class FormConsultas(QWidget):
 
         if seleccion == "Ventas por cliente":
             # Mismo layout que "Ventas por producto": combo editable en (1,1)
-            self.filtros_layout.addWidget(QLabel("DNI o Apellido:"), 1, 0, Qt.AlignRight)
+            self.filtros_layout.addWidget(QLabel("N° doc o Apellido:"), 1, 0, Qt.AlignRight)
             self.cliente_combo = QComboBox()
             self.cliente_combo.setEditable(True)
             self.cliente_combo.setInsertPolicy(QComboBox.NoInsert)
@@ -155,7 +156,9 @@ class FormConsultas(QWidget):
             empleados = session.query(Personal).filter(Personal.tipo == rol).all()
             self.empleado_combo.clear()
             for e in empleados:
-                self.empleado_combo.addItem(f"{e.apellidos}, {e.nombres} (DNI {e.dni})", userData=e.id)
+                doc = formato_documento(e)
+                texto_emp = f"{e.apellidos}, {e.nombres}" + (f" ({doc})" if doc else "")
+                self.empleado_combo.addItem(texto_emp, userData=e.id)
 
     # ---------------------------
     # Lógica: ejecutar consulta
@@ -202,7 +205,7 @@ class FormConsultas(QWidget):
                     resultados = []
                 else:
                     if valor.isdigit():
-                        clientes = session.query(Cliente).filter(Cliente.dni == valor).all()
+                        clientes = session.query(Cliente).filter(Cliente.nro_documento == valor).all()
                     else:
                         patron = f"%{valor.lower()}%"
                         clientes = session.query(Cliente).filter(
@@ -277,7 +280,7 @@ class FormConsultas(QWidget):
 
         tabla = QTableWidget()
         tabla.setColumnCount(4)
-        tabla.setHorizontalHeaderLabels(["Apellidos", "Nombres", "DNI", "Calificación"])
+        tabla.setHorizontalHeaderLabels(["Apellidos", "Nombres", "Documento", "Calificación"])
         tabla.setRowCount(len(clientes))
         tabla.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         tabla.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -287,7 +290,7 @@ class FormConsultas(QWidget):
         for r, cte in enumerate(clientes):
             tabla.setItem(r, 0, QTableWidgetItem(cte.apellidos or ""))
             tabla.setItem(r, 1, QTableWidgetItem(cte.nombres or ""))
-            tabla.setItem(r, 2, QTableWidgetItem(str(cte.dni) if cte.dni is not None else ""))
+            tabla.setItem(r, 2, QTableWidgetItem(formato_documento(cte)))
             tabla.setItem(r, 3, QTableWidgetItem(cte.calificacion or ""))
 
         v.addWidget(tabla)

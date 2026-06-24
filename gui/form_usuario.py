@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from database import get_session
 from models import Usuario, Personal, Rol
+from utils.formato import formato_documento
 import hashlib
 
 class FormUsuario(QWidget):
@@ -156,8 +157,9 @@ class FormUsuario(QWidget):
         with get_session() as session:
             personales = session.query(Personal).all()
             for p in personales:
-                texto = f"{(p.apellidos or '').strip()}, {(p.nombres or '').strip()} (DNI {p.dni or ''})"
-                self.personal_combo.addItem(texto.strip(), userData=p.id)
+                doc = formato_documento(p)
+                texto = f"{(p.apellidos or '').strip()}, {(p.nombres or '').strip()}" + (f" ({doc})" if doc else "")
+                self.personal_combo.addItem(texto, userData=p.id)
 
     def cargar_roles(self):
         """Llena el combo con: (Sin rol), Administrador, Gerente, Coordinador, Administrativo."""

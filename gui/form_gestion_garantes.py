@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, QTimer
 from database import get_session
 from models import Garante
 from gui.form_garante import FormGarante
+from utils.formato import formato_documento
 
 class FormGestionGarantes(QWidget):
     def __init__(self):
@@ -24,14 +25,14 @@ class FormGestionGarantes(QWidget):
 
         # Buscador
         self.buscador = QLineEdit()
-        self.buscador.setPlaceholderText("Buscar por apellido, nombre o DNI")
+        self.buscador.setPlaceholderText("Buscar por apellido, nombre o número de documento")
         self.buscador.textChanged.connect(self.filtrar_garantes)
         layout.addWidget(self.buscador)
 
         # Tabla (mismas columnas que Clientes)
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(6)
-        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "DNI", "Calificación", "Acciones"])
+        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "Documento", "Calificación", "Acciones"])
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla.setAlternatingRowColors(True)
         layout.addWidget(self.tabla)
@@ -129,7 +130,7 @@ class FormGestionGarantes(QWidget):
                 self.tabla.setItem(row_index, 0, QTableWidgetItem(str(garante.id)))
                 self.tabla.setItem(row_index, 1, QTableWidgetItem(garante.apellidos or ""))
                 self.tabla.setItem(row_index, 2, QTableWidgetItem(garante.nombres or ""))
-                self.tabla.setItem(row_index, 3, QTableWidgetItem(garante.dni or ""))
+                self.tabla.setItem(row_index, 3, QTableWidgetItem(formato_documento(garante)))
                 # Nueva columna: Calificación (igual a Clientes)
                 self.tabla.setItem(row_index, 4, QTableWidgetItem(getattr(garante, "calificacion", "") or ""))
 
@@ -175,7 +176,7 @@ class FormGestionGarantes(QWidget):
             g for g in self.todos_los_garantes
             if (g.apellidos and texto in g.apellidos.lower()) or
                (g.nombres and texto in g.nombres.lower()) or
-               (g.dni and texto in g.dni.lower())
+               (g.nro_documento and texto in g.nro_documento.lower())
         ]
         self.mostrar_garantes(filtrados)
 

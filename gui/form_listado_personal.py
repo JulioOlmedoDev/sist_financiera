@@ -8,6 +8,7 @@ from database import get_session
 from models import Personal
 from gui.form_personal import FormPersonal
 from utils.permisos import tiene_permiso, es_admin
+from utils.formato import formato_documento
 
 class FormListadoPersonal(QWidget):
     """
@@ -52,7 +53,7 @@ class FormListadoPersonal(QWidget):
 
         # Buscador
         self.buscador = QLineEdit()
-        self.buscador.setPlaceholderText("Buscar por apellido, nombre o DNI")
+        self.buscador.setPlaceholderText("Buscar por apellido, nombre o número de documento")
         self.buscador.setMinimumHeight(36)
         self.buscador.textChanged.connect(self.actualizar_tabla)
         layout.addWidget(self.buscador)
@@ -60,7 +61,7 @@ class FormListadoPersonal(QWidget):
         # Tabla
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(6)
-        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "DNI", "Tipo", "Acciones"])
+        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "Documento", "Tipo", "Acciones"])
         self.tabla.verticalHeader().setVisible(False)
         self.tabla.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
@@ -88,7 +89,7 @@ class FormListadoPersonal(QWidget):
         layout.addWidget(self.tabla)
 
         # Info/leyenda
-        leyenda = QLabel("Buscar por apellidos, nombres o DNI. Seleccioná 'Editar' para modificar un registro.")
+        leyenda = QLabel("Buscar por apellidos, nombres o número de documento. Seleccioná 'Editar' para modificar un registro.")
         leyenda.setStyleSheet("color: #444; font-size: 12px;")
         layout.addWidget(leyenda)
 
@@ -112,7 +113,7 @@ class FormListadoPersonal(QWidget):
             for p in personales:
                 if (texto in (p.apellidos or "").lower()
                     or texto in (p.nombres or "").lower()
-                    or texto in (p.dni or "").lower()):
+                    or texto in (p.nro_documento or "").lower()):
                     filtrados.append(p)
 
         self.tabla.setRowCount(len(filtrados))
@@ -125,7 +126,7 @@ class FormListadoPersonal(QWidget):
             # Nombres (col 2)
             self.tabla.setItem(row, 2, QTableWidgetItem(persona.nombres or ""))
             # DNI (col 3)
-            self.tabla.setItem(row, 3, QTableWidgetItem(persona.dni or ""))
+            self.tabla.setItem(row, 3, QTableWidgetItem(formato_documento(persona)))
             # Tipo (col 4)
             self.tabla.setItem(row, 4, QTableWidgetItem(persona.tipo or ""))
 

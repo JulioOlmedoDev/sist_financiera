@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Personal
 from gui.form_personal import FormPersonal
+from utils.formato import formato_documento
 
 
 class FormGestionPersonal(QWidget):
@@ -25,14 +26,14 @@ class FormGestionPersonal(QWidget):
 
         # Buscador
         self.buscador = QLineEdit()
-        self.buscador.setPlaceholderText("Buscar por apellido, nombre o DNI")
+        self.buscador.setPlaceholderText("Buscar por apellido, nombre o número de documento")
         self.buscador.textChanged.connect(self.filtrar)
         layout.addWidget(self.buscador)
 
         # Tabla
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(6)
-        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "DNI", "Tipo", "Acciones"])
+        self.tabla.setHorizontalHeaderLabels(["ID", "Apellidos", "Nombres", "Documento", "Tipo", "Acciones"])
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla.setAlternatingRowColors(True)
         self.tabla.verticalHeader().setVisible(False)
@@ -78,7 +79,7 @@ class FormGestionPersonal(QWidget):
             self.tabla.setItem(row_index, 0, QTableWidgetItem(str(persona.id)))
             self.tabla.setItem(row_index, 1, QTableWidgetItem(persona.apellidos or ""))
             self.tabla.setItem(row_index, 2, QTableWidgetItem(persona.nombres or ""))
-            self.tabla.setItem(row_index, 3, QTableWidgetItem(persona.dni or ""))
+            self.tabla.setItem(row_index, 3, QTableWidgetItem(formato_documento(persona)))
             self.tabla.setItem(row_index, 4, QTableWidgetItem(persona.tipo or ""))
 
             # Botón editar
@@ -109,7 +110,7 @@ class FormGestionPersonal(QWidget):
         filtrados = [p for p in self.todos if
                      texto in (p.apellidos or "").lower() or
                      texto in (p.nombres or "").lower() or
-                     texto in (p.dni or "")]
+                     texto in (p.nro_documento or "")]
         self.mostrar(filtrados)
 
     def _refrescar_al_cerrar(self, event):
