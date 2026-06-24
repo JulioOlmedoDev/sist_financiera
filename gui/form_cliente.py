@@ -12,6 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from database import get_session
 from models import Cliente
 
+TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
+
 class FormCliente(QWidget):
     cliente_guardado = Signal()
 
@@ -38,7 +40,8 @@ class FormCliente(QWidget):
         campos = [
             ("Apellidos", "apellidos", True),
             ("Nombres", "nombres", True),
-            ("DNI", "dni", True),
+            ("Tipo de Documento", "tipo_documento", True, "combo", TIPOS_DOC),
+            ("N° de Documento",   "nro_documento",  True),
             ("Fecha de nacimiento", "fecha_nacimiento", True, "date"),
             ("Ocupación", "ocupacion", False),
             ("Domicilio personal", "domicilio_personal", True),
@@ -70,8 +73,6 @@ class FormCliente(QWidget):
                 input_widget.setInputMask("00/00/0000;_")
             else:
                 input_widget = QLineEdit()
-                if key == "dni":
-                    input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("[0-9]+")))
                 if key.startswith("celular"):
                     input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("[0-9+\\-\\s]+")))
 
@@ -175,7 +176,7 @@ class FormCliente(QWidget):
 
     def guardar_cliente(self):
         campos_requeridos = [
-            "apellidos", "nombres", "dni",
+            "apellidos", "nombres",
             "domicilio_personal", "localidad", "provincia",
             "sexo", "estado_civil", "celular_personal"
         ]
@@ -189,6 +190,28 @@ class FormCliente(QWidget):
             elif isinstance(widget, ComboBoxSinScroll) and not widget.currentText().strip():
                 widget.setStyleSheet("border: 2px solid red;")
                 return self.mostrar_alerta(campo)
+
+        # ── Validación del par de documento (obligatorio en cliente) ──
+        tipo_doc_w = self.campos["tipo_documento"]
+        nro_doc_w  = self.campos["nro_documento"]
+        tipo_doc_w.setStyleSheet("")
+        nro_doc_w.setStyleSheet("")
+        tipo_val = tipo_doc_w.currentText()
+        nro_val  = nro_doc_w.text().strip()
+        if tipo_val == "SELECCIONAR" and not nro_val:
+            tipo_doc_w.setStyleSheet("border: 2px solid red;")
+            nro_doc_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Campo requerido",
+                "El documento es obligatorio. Elegí el tipo e ingresá el número.")
+            return
+        if tipo_val == "SELECCIONAR":
+            tipo_doc_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Campo requerido", "Elegí el tipo de documento.")
+            return
+        if not nro_val:
+            nro_doc_w.setStyleSheet("border: 2px solid red;")
+            QMessageBox.warning(self, "Campo requerido", "Ingresá el número de documento.")
+            return
 
         fecha_nac_w = self.campos["fecha_nacimiento"]
         fecha_nac_w.setStyleSheet("")
@@ -235,10 +258,18 @@ class FormCliente(QWidget):
                 for key, widget in self.campos.items():
                     if key == "fecha_nacimiento":
                         setattr(cliente, key, parsear_fecha(widget.text()))
+                    elif key == "tipo_documento":
+                        val = widget.currentText()
+                        setattr(cliente, key, val if val != "SELECCIONAR" else None)
+                    elif key == "nro_documento":
+                        val = widget.text().strip()
+                        setattr(cliente, key, val or None)
                     elif isinstance(widget, QLineEdit):
                         setattr(cliente, key, widget.text())
                     elif isinstance(widget, ComboBoxSinScroll):
                         setattr(cliente, key, widget.currentText())
+
+                cliente.dni = cliente.nro_documento
 
                 if not self.editando:
                     session.add(cliente)
@@ -251,9 +282,9 @@ class FormCliente(QWidget):
             else:
                 self.limpiar_formulario()
         except IntegrityError as e:
-            if "dni" in str(e).lower():
-                QMessageBox.critical(self, "DNI duplicado",
-                    "Ya existe un cliente con ese DNI.")
+            if "uq_clientes_tipo_nro" in str(e).lower():
+                QMessageBox.critical(self, "Documento duplicado",
+                    "Ya existe un cliente con ese tipo y número de documento.")
             else:
                 QMessageBox.critical(self, "Error", f"No se pudo guardar el cliente:\n{e}")
         except Exception as e:

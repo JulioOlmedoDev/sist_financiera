@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, Text, ForeignKey, Enum, Boolean, Float
+from sqlalchemy import Column, Integer, String, Date, DateTime, Text, ForeignKey, Enum, Boolean, Float, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -54,10 +54,15 @@ class Usuario(Base):
 
 class Cliente(Base):
     __tablename__ = 'clientes'
+    __table_args__ = (
+        UniqueConstraint('tipo_documento', 'nro_documento', name='uq_clientes_tipo_nro'),
+    )
     id = Column(Integer, primary_key=True)
     apellidos = Column(String(100))
     nombres = Column(String(100))
-    dni = Column(String(20), unique=True)
+    dni = Column(String(20))
+    tipo_documento = Column(String(20), nullable=True)
+    nro_documento  = Column(String(50), nullable=True)
     fecha_nacimiento = Column(Date)
     ocupacion = Column(String(100))
     domicilio_personal = Column(String(255))
@@ -75,10 +80,15 @@ class Cliente(Base):
 
 class Garante(Base):
     __tablename__ = 'garantes'
+    __table_args__ = (
+        UniqueConstraint('tipo_documento', 'nro_documento', name='uq_garantes_tipo_nro'),
+    )
     id = Column(Integer, primary_key=True)
     apellidos = Column(String(100))
     nombres = Column(String(100))
-    dni = Column(String(20), unique=True)
+    dni = Column(String(20))
+    tipo_documento = Column(String(20), nullable=True)
+    nro_documento  = Column(String(50), nullable=True)
     fecha_nacimiento = Column(Date)
     ocupacion = Column(String(100))
     domicilio_personal = Column(String(255))
@@ -108,10 +118,15 @@ class Producto(Base):
 
 class Personal(Base):
     __tablename__ = 'personal'
+    __table_args__ = (
+        UniqueConstraint('tipo_documento', 'nro_documento', name='uq_personal_tipo_nro'),
+    )
     id = Column(Integer, primary_key=True)
     apellidos = Column(String(100))
     nombres = Column(String(100))
-    dni = Column(String(20), unique=True)
+    dni = Column(String(20))
+    tipo_documento = Column(String(20), nullable=True)
+    nro_documento  = Column(String(50), nullable=True)
     fecha_nacimiento = Column(Date)
     domicilio_personal = Column(String(255))
     localidad = Column(String(100))
