@@ -269,8 +269,6 @@ class FormCliente(QWidget):
                     elif isinstance(widget, ComboBoxSinScroll):
                         setattr(cliente, key, widget.currentText())
 
-                cliente.dni = cliente.nro_documento
-
                 if not self.editando:
                     session.add(cliente)
 

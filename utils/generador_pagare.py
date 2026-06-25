@@ -107,12 +107,10 @@ def preparar_datos_pagare(venta: Venta) -> dict:
 
     return {
         "cliente_nombre": f"{cliente.apellidos} {cliente.nombres}",
-        "cliente_dni": cliente.dni,
         "cliente_domicilio": cliente.domicilio_personal or "________",
         "cliente_localidad": cliente.localidad or "________",
         "cliente_provincia": cliente.provincia or "________",
         "garante_nombre": f"{garante.apellidos} {garante.nombres}" if garante else "________",
-        "garante_dni": garante.dni if garante else "________",
         "cliente_tipo_doc": cliente.tipo_documento or "",
         "cliente_nro_doc":  cliente.nro_documento  or "",
         "garante_tipo_doc": garante.tipo_documento if garante else "________",

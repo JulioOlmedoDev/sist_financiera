@@ -331,8 +331,6 @@ class FormPersonal(QWidget):
                     elif isinstance(widget, QComboBox):
                         setattr(personal, key, widget.currentText())
 
-                personal.dni = personal.nro_documento
-
                 if not self.editando:
                     session.add(personal)
 

@@ -280,8 +280,6 @@ class FormGarante(QWidget):
                     elif isinstance(widget, ComboBoxSinScroll):
                         setattr(garante, key, widget.currentText())
 
-                garante.dni = garante.nro_documento
-
                 if not self.editando:
                     session.add(garante)
 

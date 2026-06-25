@@ -11,7 +11,8 @@ with get_session() as session:
         personal_admin = Personal(
             apellidos="Administrador",
             nombres="Sistema",
-            dni="00000000",
+            tipo_documento="DNI",
+            nro_documento="00000000",
             fecha_nacimiento=date(2000, 1, 1),
             domicilio_personal="Oficina Central",
             localidad="Ciudad",
