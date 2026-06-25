@@ -15,7 +15,14 @@ from dateutil.relativedelta import relativedelta
 import os
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
+from utils.formato import formato_documento
 from sqlalchemy import desc
+
+
+def _display_persona(obj) -> str:
+    doc = formato_documento(obj)
+    base = f"{obj.apellidos}, {obj.nombres}"
+    return f"{base} ({doc})" if doc else base
 
 
 class ConfirmarVentaDialog(QDialog):
@@ -122,7 +129,7 @@ class FormVenta(QWidget):
         btns.addWidget(self.btn_nuevo_cliente)
         btns.addWidget(self.btn_refresh_cliente)
         self.form.addRow(lbl, btns)
-        self.form.addRow("", QLabel("Buscar por apellido o DNI", styleSheet="font-size:11px;color:gray;"))
+        self.form.addRow("", QLabel("Buscar por apellido o N° documento", styleSheet="font-size:11px;color:gray;"))
 
         # --- Garante (opcional) ---
         lbl = QLabel("Garante:"); lbl.setStyleSheet(label_style)
@@ -142,7 +149,7 @@ class FormVenta(QWidget):
         btns2.addWidget(self.btn_nuevo_garante)
         btns2.addWidget(self.btn_refresh_garante)
         self.form.addRow(lbl, btns2)
-        self.form.addRow("", QLabel("Buscar por apellido o DNI", styleSheet="font-size:11px;color:gray;"))
+        self.form.addRow("", QLabel("Buscar por apellido o N° documento", styleSheet="font-size:11px;color:gray;"))
 
         # --- Producto / Plan (requeridos) ---
         lbl = QLabel("Producto:"); lbl.setStyleSheet(label_style)
@@ -424,9 +431,9 @@ class FormVenta(QWidget):
         es_activa = (not venta.anulada) and (not venta.finalizada)
 
         # --- Datos base ---
-        self.cliente_input.setText(f"{venta.cliente.apellidos}, {venta.cliente.nombres} (DNI {venta.cliente.dni})")
+        self.cliente_input.setText(_display_persona(venta.cliente))
         if venta.garante:
-            self.garante_input.setText(f"{venta.garante.apellidos}, {venta.garante.nombres} (DNI {venta.garante.dni})")
+            self.garante_input.setText(_display_persona(venta.garante))
 
         campos_bloqueados = [
             self.cliente_input, self.garante_input, self.producto_combo, self.plan_pago_combo,
@@ -550,16 +557,18 @@ class FormVenta(QWidget):
     def cargar_clientes(self):
         with get_session() as session:
             self.clientes = session.query(Cliente).all()
-        lista = [f"{c.apellidos}, {c.nombres} (DNI {c.dni})" for c in self.clientes]
+        lista = [_display_persona(c) for c in self.clientes]
         comp = QCompleter(lista); comp.setCaseSensitivity(Qt.CaseInsensitive)
+        comp.setFilterMode(Qt.MatchContains)
         self.cliente_input.setCompleter(comp)
         comp.popup().installEventFilter(self)
 
     def cargar_garantes(self):
         with get_session() as session:
             self.garantes = session.query(Garante).all()
-        lista = [f"{g.apellidos}, {g.nombres} (DNI {g.dni})" for g in self.garantes]
+        lista = [_display_persona(g) for g in self.garantes]
         comp = QCompleter(lista); comp.setCaseSensitivity(Qt.CaseInsensitive)
+        comp.setFilterMode(Qt.MatchContains)
         self.garante_input.setCompleter(comp)
         comp.popup().installEventFilter(self)
 
@@ -662,7 +671,7 @@ class FormVenta(QWidget):
             # A partir de acá se aplican las validaciones completas y el requisito de PTF.
             texto = self.cliente_input.text()
             cliente = next((c for c in self.clientes
-                            if f"{c.apellidos}, {c.nombres} (DNI {c.dni})" == texto), None)
+                            if _display_persona(c) == texto), None)
             if not cliente:
                 QMessageBox.warning(self, "Dato requerido", "Seleccioná un cliente válido."); return
 
@@ -691,7 +700,7 @@ class FormVenta(QWidget):
             # Garante opcional
             texto2 = self.garante_input.text()
             garante = next((g for g in self.garantes
-                            if f"{g.apellidos}, {g.nombres} (DNI {g.dni})" == texto2), None)
+                            if _display_persona(g) == texto2), None)
 
             # Confirmación previa (ventana detalle)
             if not self._mostrar_confirmacion_guardado(texto, texto2):
