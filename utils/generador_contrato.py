@@ -118,6 +118,10 @@ def preparar_datos_contrato(venta: Venta):
         "garante_nombre": f"{garante.apellidos} {garante.nombres}" if garante else "________",
         "garante_domicilio": garante.domicilio_personal if garante else "________",
         "garante_dni": garante.dni if garante else "________",
+        "cliente_tipo_doc": cliente.tipo_documento or "",
+        "cliente_nro_doc":  cliente.nro_documento  or "",
+        "garante_tipo_doc": garante.tipo_documento if garante else "________",
+        "garante_nro_doc":  garante.nro_documento  if garante else "________",
         "garante_localidad": garante.localidad if garante else "________",
         "dia": fecha_contrato.day,
         "mes": MESES[fecha_contrato.month - 1],  # sin locale
