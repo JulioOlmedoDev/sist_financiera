@@ -7,7 +7,6 @@ Uso:
 Idempotente: se puede ejecutar sobre una base ya inicializada sin perder datos.
 """
 import getpass
-import os
 import sys
 
 from dotenv import load_dotenv
@@ -16,9 +15,7 @@ load_dotenv()
 
 from database import engine, get_session
 from models import Base, Permiso, Rol, Usuario
-from passlib.hash import argon2
-
-PEPPER = os.environ.get("APP_PEPPER", "")
+from utils.security import hash_password
 
 # ── Datos canónicos ────────────────────────────────────────────────────────────
 
@@ -156,7 +153,7 @@ def paso_crear_admin(session) -> bool:
             continue
         break
 
-    pwd_hash = argon2.hash(pwd1 + PEPPER)
+    pwd_hash = hash_password(pwd1)
 
     rol_admin = session.query(Rol).filter_by(nombre="Administrador").first()
     todos_los_permisos = session.query(Permiso).all()

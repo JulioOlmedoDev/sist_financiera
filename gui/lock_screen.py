@@ -2,22 +2,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QHBoxLayo
 from PySide6.QtCore import Qt
 from database import get_session
 from models import Usuario
-import os, hashlib
-from passlib.hash import argon2
-
-PEPPER = os.environ.get("APP_PEPPER", "")
-
-def _verify_password(plain: str, stored: str) -> bool:
-    """
-    Verifica la contraseña: primero Argon2id, si no, SHA-256 legacy.
-    """
-    if stored.startswith("$argon2"):
-        try:
-            return argon2.verify(plain + PEPPER, stored)
-        except Exception:
-            return False
-    # Legacy SHA-256 (hex)
-    return hashlib.sha256(plain.encode()).hexdigest() == stored
+from utils.security import hash_password, verify_password
 
 class LockScreenDialog(QDialog):
     """
@@ -80,14 +65,17 @@ class LockScreenDialog(QDialog):
             QMessageBox.warning(self, "Campos vacíos", "Ingresá tu contraseña."); return
 
         with get_session() as session:
-            user = session.query(Usuario).get(self.usuario.id)
+            user = session.get(Usuario, self.usuario.id)
             if not user or not user.activo:
                 QMessageBox.critical(self, "Sesión inválida", "Tu usuario no está disponible. Cerrando sesión.")
                 self._quit_app()
                 return
-            password_ok = _verify_password(plain, user.password)
+            ok, is_legacy = verify_password(plain, user.password)
+            if ok and is_legacy:
+                user.password = hash_password(plain)
+                session.commit()
 
-        if password_ok:
+        if ok:
             self.accept()
         else:
             QMessageBox.critical(self, "Contraseña incorrecta", "La contraseña no es válida.")

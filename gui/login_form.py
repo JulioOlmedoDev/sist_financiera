@@ -7,41 +7,16 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Usuario
 from sqlalchemy.orm import joinedload
-import hashlib
 import os
 from datetime import datetime, timedelta
 import pyotp
 from gui.two_factor_setup import TwoFactorSetupDialog
 from models import get_setting
-
-
-# === Seguridad: Argon2id ===
-from passlib.hash import argon2
-
-# (opcional) PEPPER por env var
-PEPPER = os.environ.get("APP_PEPPER", "")
+from utils.security import hash_password, verify_password
 
 PASSWORD_MAX_AGE_DAYS = 60
 LOCK_THRESHOLD = 5
 LOCK_MINUTES = 15
-
-def _hash_new(pwd: str) -> str:
-    return argon2.hash(pwd + PEPPER)
-
-def _verify_any(pwd: str, stored: str) -> tuple[bool, bool]:
-    """
-    Verifica contra Argon2; si no matchea, prueba contra SHA-256 legacy.
-    Devuelve (ok, es_legacy).
-    """
-    # hash Argon2/bcrypt tienen prefijo $argon2.../$2b$..., los sha256 legacy son hex plain
-    try:
-        if stored.startswith("$argon2"):
-            return (argon2.verify(pwd + PEPPER, stored), False)
-    except Exception:
-        pass
-    # Legacy sha256 (lo que tenías)
-    legacy = hashlib.sha256(pwd.encode()).hexdigest()
-    return (legacy == stored, True if legacy == stored else False)
 
 
 class ChangePasswordDialog(QDialog):
@@ -81,7 +56,7 @@ class ChangePasswordDialog(QDialog):
 
         with get_session() as session:
             u = session.get(Usuario, self._usuario_id)
-            u.password = _hash_new(pwd1)
+            u.password = hash_password(pwd1)
             u.last_password_change = datetime.utcnow()
             u.must_change_password = False
             u.failed_attempts = 0
@@ -237,7 +212,7 @@ class LoginForm(QWidget):
             QMessageBox.warning(self, "Cuenta bloqueada", f"Intentá nuevamente en {minutos} min.")
             return
 
-        ok, legacy = _verify_any(password, usuario.password)
+        ok, legacy = verify_password(password, usuario.password)
         if not ok:
             # 2. Registrar intento fallido
             with get_session() as session:
@@ -259,7 +234,7 @@ class LoginForm(QWidget):
             u.failed_attempts = 0
             u.lock_until = None
             if legacy:
-                u.password = _hash_new(password)
+                u.password = hash_password(password)
                 usuario.password = u.password
                 if not u.last_password_change:
                     u.last_password_change = now

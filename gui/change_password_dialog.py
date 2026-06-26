@@ -3,11 +3,7 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Usuario
 from datetime import datetime
-import os
-
-# Hash seguro
-from passlib.hash import argon2
-PEPPER = os.environ.get("APP_PEPPER", "")
+from utils.security import hash_password
 
 class ChangePasswordDialog(QDialog):
     """
@@ -56,7 +52,7 @@ class ChangePasswordDialog(QDialog):
             return
 
         # Actualizar atributos en el objeto local
-        self.usuario.password = argon2.hash(pwd1 + PEPPER)
+        self.usuario.password = hash_password(pwd1)
         self.usuario.last_password_change = datetime.utcnow()
         self.usuario.must_change_password = False
         self.usuario.failed_attempts = 0
