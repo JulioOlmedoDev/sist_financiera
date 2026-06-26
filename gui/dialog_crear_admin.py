@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from database import get_session
 from models import Usuario, Permiso
-import hashlib
+from utils.security import hash_password
 
 class DialogCrearAdmin(QDialog):
     def __init__(self):
@@ -69,7 +69,7 @@ class DialogCrearAdmin(QDialog):
             return
 
         # Hashear la contraseña
-        pwd_hash = hashlib.sha256(pwd.encode("utf-8")).hexdigest()
+        pwd_hash = hash_password(pwd)
 
         try:
             with get_session() as session:

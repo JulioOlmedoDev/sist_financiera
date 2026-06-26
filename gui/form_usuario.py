@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, Signal
 from database import get_session
 from models import Usuario, Personal, Rol
 from utils.formato import formato_documento
-import hashlib
+from utils.security import hash_password
 
 class FormUsuario(QWidget):
     usuario_guardado = Signal()
@@ -252,7 +252,7 @@ class FormUsuario(QWidget):
                     usuario.nombre = nombre
                     usuario.rol_id = rol_id
                     if password:
-                        usuario.password = hashlib.sha256(password.encode()).hexdigest()
+                        usuario.password = hash_password(password)
                     session.commit()
                     QMessageBox.information(self, "Éxito", "Usuario actualizado correctamente.")
                 else:
@@ -268,7 +268,7 @@ class FormUsuario(QWidget):
                     nuevo = Usuario(
                         nombre=nombre,
                         email=email,
-                        password=hashlib.sha256(password.encode()).hexdigest(),
+                        password=hash_password(password),
                         rol_id=rol_id,
                         personal_id=personal_id,
                         activo=True
