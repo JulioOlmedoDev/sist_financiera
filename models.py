@@ -46,6 +46,7 @@ class Usuario(Base):
     totp_secret = Column(String(64), nullable=True)
     totp_enabled = Column(Boolean, default=False, nullable=False)
     require_2fa = Column(Boolean, default=False, nullable=False)  # exigir 2FA a este usuario
+    totp_set_by_admin = Column(Boolean, default=False, nullable=False)  # token impuesto por admin
 
     rol = relationship("Rol")
     permisos = relationship("Permiso", secondary="usuario_permisos")

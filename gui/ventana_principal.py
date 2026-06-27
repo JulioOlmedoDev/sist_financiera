@@ -1070,6 +1070,14 @@ class VentanaPrincipal(QMainWindow):
         """Apaga el 2FA del usuario actual desde el menú de perfil."""
         from PySide6.QtWidgets import QMessageBox
         from database import get_session
+        if getattr(self.usuario, "totp_set_by_admin", False):
+            QMessageBox.warning(
+                self, "Acción no permitida",
+                "Tu token de seguridad fue activado por política de la empresa "
+                "y no podés desactivarlo vos mismo.\n"
+                "Solicitá a un usuario autorizado que lo gestione desde Recuperar acceso."
+            )
+            return
         ok = QMessageBox.question(
             self, "Desactivar ingreso con token",
             "¿Seguro que querés desactivar el ingreso con token (2FA) para tu cuenta?",

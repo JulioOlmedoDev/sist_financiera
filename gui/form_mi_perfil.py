@@ -63,6 +63,14 @@ class FormMiPerfil(QWidget):
 
     def _toggle_2fa(self):
         if getattr(self.usuario, "totp_enabled", False):
+            if getattr(self.usuario, "totp_set_by_admin", False):
+                QMessageBox.warning(
+                    self, "Acción no permitida",
+                    "Tu token de seguridad fue activado por política de la empresa "
+                    "y no podés desactivarlo vos mismo.\n"
+                    "Solicitá a un usuario autorizado que lo gestione desde Recuperar acceso."
+                )
+                return
             # Desactivar
             ok = QMessageBox.question(self, "Confirmar",
                                       "¿Seguro que querés desactivar el ingreso con token (2FA)?",

@@ -102,6 +102,7 @@ class TwoFactorSetupDialog(QDialog):
         # Guardar en DB usando merge sobre el objeto detachado
         self.usuario.totp_secret = self.secret
         self.usuario.totp_enabled = True
+        self.usuario.totp_set_by_admin = False
         try:
             with get_session() as session:
                 session.merge(self.usuario)
