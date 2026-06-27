@@ -96,10 +96,15 @@ class FormRecuperarAcceso(QWidget):
         box_totp = QGroupBox("Token de seguridad (2FA)")
         totp_layout = QVBoxLayout(box_totp)
 
-        self.btn_toggle_totp = QPushButton("Activar / Desactivar token")
-        self.btn_toggle_totp.clicked.connect(self.toggle_totp)
+        btns_totp = QHBoxLayout()
+        self.btn_imponer_totp    = QPushButton("Imponer token")
+        self.btn_desactivar_totp = QPushButton("Desactivar token")
+        self.btn_imponer_totp.clicked.connect(self.imponer_totp)
+        self.btn_desactivar_totp.clicked.connect(self.desactivar_totp)
+        btns_totp.addWidget(self.btn_imponer_totp)
+        btns_totp.addWidget(self.btn_desactivar_totp)
 
-        totp_layout.addWidget(self.btn_toggle_totp)
+        totp_layout.addLayout(btns_totp)
         layout.addWidget(box_totp)
 
         layout.addStretch()
@@ -126,7 +131,7 @@ class FormRecuperarAcceso(QWidget):
         pid = self._get_personal_id()
         if not pid:
             self.lbl_username.setText("Nombre de usuario: —")
-            self.lbl_token.setText("Token habilitado: —")
+            self.lbl_token.setText("Token: —")
             self.lbl_estado.setText("")
             return
 
@@ -134,15 +139,31 @@ class FormRecuperarAcceso(QWidget):
             user = session.query(Usuario).filter_by(personal_id=pid).first()
             if not user:
                 self.lbl_username.setText("Nombre de usuario: —")
-                self.lbl_token.setText("Token habilitado: —")
-                self.lbl_estado.setText("<span style='color:red;'>Este empleado no tiene usuario asignado.</span>")
+                self.lbl_token.setText("Token: —")
+                self.lbl_estado.setText(
+                    "<span style='color:red;'>Este empleado no tiene usuario asignado.</span>"
+                )
                 return
-            nombre = user.nombre
-            totp_enabled = user.totp_enabled
+            nombre        = user.nombre
+            totp_enabled  = user.totp_enabled
+            set_by_admin  = user.totp_set_by_admin
+            require_2fa   = user.require_2fa
+            tiene_secreto = bool(user.totp_secret)
+
+        if totp_enabled and set_by_admin:
+            estado_token = "Token: ACTIVO (impuesto por admin)"
+        elif totp_enabled:
+            estado_token = "Token: ACTIVO (activado por el usuario)"
+        elif require_2fa:
+            estado_token = "Token: INACTIVO — exigido en próximo login"
+        elif tiene_secreto:
+            estado_token = "Token: INACTIVO (fue configurado antes)"
+        else:
+            estado_token = "Token: INACTIVO (nunca configurado)"
 
         self.lbl_estado.setText("")
         self.lbl_username.setText(f"Nombre de usuario:  {nombre}")
-        self.lbl_token.setText(f"Token habilitado:  {'Sí' if totp_enabled else 'No'}")
+        self.lbl_token.setText(estado_token)
 
     # =======================================================
     # Blanqueo de contraseña
@@ -182,12 +203,29 @@ class FormRecuperarAcceso(QWidget):
         self.txt_nueva_pass.clear()
 
     # =======================================================
-    # Token ON/OFF
+    # Token — Imponer / Desactivar
     # =======================================================
-    def toggle_totp(self):
+    def imponer_totp(self):
         pid = self._get_personal_id()
         if not pid:
             QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
+            return
+
+        with get_session() as session:
+            user = session.query(Usuario).filter_by(personal_id=pid).first()
+            if not user:
+                QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
+                return
+            nombre_usuario = user.nombre
+
+        ok = QMessageBox.question(
+            self, "Confirmar imposición de token",
+            f"¿Imponer el token de seguridad a «{nombre_usuario}»?\n\n"
+            "Se le exigirá configurar el 2FA en su próximo login si aún no lo tiene.\n"
+            "Si ya lo tenía activo, quedará marcado como impuesto por política de la empresa.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if ok != QMessageBox.Yes:
             return
 
         try:
@@ -196,24 +234,61 @@ class FormRecuperarAcceso(QWidget):
                 if not user:
                     QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
                     return
-
-                if user.totp_enabled:
-                    user.totp_enabled = False
-                    session.commit()
-                    QMessageBox.information(self, "Token deshabilitado", "El token fue desactivado temporalmente.")
-                else:
-                    if not user.totp_secret:
-                        QMessageBox.warning(
-                            self,
-                            "No disponible",
-                            "Este usuario nunca configuró su token.\nDebe activarlo desde su propio perfil."
-                        )
-                        return
-                    user.totp_enabled = True
-                    session.commit()
-                    QMessageBox.information(self, "Token habilitado", "El token fue activado nuevamente.")
+                user.require_2fa       = True
+                user.totp_set_by_admin = True
+                session.commit()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
             return
 
+        QMessageBox.information(
+            self, "Token impuesto",
+            f"Se exigió el token de seguridad a «{nombre_usuario}».\n"
+            "Deberá configurarlo con su app en el próximo login si aún no lo tiene."
+        )
+        self.cargar_info_usuario()
+
+    def desactivar_totp(self):
+        pid = self._get_personal_id()
+        if not pid:
+            QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
+            return
+
+        with get_session() as session:
+            user = session.query(Usuario).filter_by(personal_id=pid).first()
+            if not user:
+                QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
+                return
+            nombre_usuario = user.nombre
+
+        ok = QMessageBox.question(
+            self, "Confirmar desactivación de token",
+            f"¿Desactivar el token de seguridad de «{nombre_usuario}»?\n\n"
+            "Se eliminarán la configuración del token y la exigencia de 2FA.\n"
+            "El secreto del autenticador quedará invalidado (útil ante celular perdido).",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if ok != QMessageBox.Yes:
+            return
+
+        try:
+            with get_session() as session:
+                user = session.query(Usuario).filter_by(personal_id=pid).first()
+                if not user:
+                    QMessageBox.warning(self, "Sin usuario", "Este empleado no tiene usuario.")
+                    return
+                user.totp_enabled      = False
+                user.require_2fa       = False
+                user.totp_set_by_admin = False
+                user.totp_secret       = None
+                session.commit()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+            return
+
+        QMessageBox.information(
+            self, "Token desactivado",
+            f"El token de seguridad de «{nombre_usuario}» fue desactivado "
+            "y su configuración eliminada."
+        )
         self.cargar_info_usuario()
