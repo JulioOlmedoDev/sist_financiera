@@ -526,7 +526,7 @@ class VentanaPrincipal(QMainWindow):
                 btn_gestion_personal.clicked.connect(self._on_click(self._set_active_sub_btn, btn_gestion_personal, self.abrir_gestion_personal))
                 self.menu_layout.addWidget(btn_gestion_personal)
 
-            if tiene_permiso_match(self.usuario, "asignar_usuario", "0330", "0340"):
+            if tiene_permiso_match(self.usuario, "asignar_usuario", "0330", "0340", "0350"):
                 btn_usuarios = BotonNavegacion("  Usuarios", "static/icons/user.png")
                 btn_usuarios.clicked.connect(self._on_click(self._set_active_sub_btn, btn_usuarios, self.abrir_form_usuario))
                 self.menu_layout.addWidget(btn_usuarios)

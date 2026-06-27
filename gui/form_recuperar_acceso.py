@@ -21,7 +21,7 @@ class FormRecuperarAcceso(QWidget):
             self.close()
             return
 
-        if not (es_admin(usuario) or tiene_permiso(usuario, "recuperar_acceso")):
+        if not (es_admin(usuario) or tiene_permiso(usuario, "0350 Recuperar acceso (blanqueo contraseña)")):
             QMessageBox.critical(
                 self, "Acceso denegado",
                 "No tenés permisos para recuperar acceso de usuarios."
