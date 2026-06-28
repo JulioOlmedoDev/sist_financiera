@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Personal
 from gui.form_personal import FormPersonal
+from sqlalchemy.exc import IntegrityError
 from utils.permisos import tiene_permiso, es_admin
 from utils.formato import formato_documento
 
@@ -190,6 +191,14 @@ class FormListadoPersonal(QWidget):
                     session.commit()
                 QMessageBox.information(self, "Eliminado", "Personal eliminado correctamente.")
                 self.actualizar_tabla()
+            except IntegrityError as e:
+                if "usuarios" in str(e).lower():
+                    QMessageBox.warning(self, "No se puede eliminar",
+                                        "Este empleado tiene un usuario asignado. "
+                                        "Primero debe eliminarse el usuario.")
+                else:
+                    QMessageBox.warning(self, "No se puede eliminar",
+                                        "Este empleado participó en ventas registradas y no puede eliminarse.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar:\n{e}")
         return callback

@@ -15,7 +15,8 @@ from models import Garante
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
 class FormGarante(QWidget):
-    garante_guardado = Signal()
+    garante_guardado  = Signal()
+    garante_cancelado = Signal()
 
     def __init__(self, garante_id=None):
         super().__init__()
@@ -122,7 +123,7 @@ class FormGarante(QWidget):
         layout.addLayout(botones_principales)
 
         self.btn_guardar.clicked.connect(self.guardar_garante)
-        self.btn_cancelar.clicked.connect(self.close)
+        self.btn_cancelar.clicked.connect(self.cancelar_formulario)
 
         self.setStyleSheet("""
             QWidget {
@@ -311,6 +312,9 @@ class FormGarante(QWidget):
                     session.commit()
                 QMessageBox.information(self, "Eliminado", "Garante eliminado correctamente")
                 self.close()
+            except IntegrityError:
+                QMessageBox.warning(self, "No se puede eliminar",
+                                    "Este garante figura en ventas registradas y no puede eliminarse.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el garante:\n{e}")
 
@@ -318,6 +322,10 @@ class FormGarante(QWidget):
         nombre_legible = campo.replace('_', ' ').capitalize()
         QMessageBox.warning(self, "Campo requerido", f"Por favor completá el campo: {nombre_legible}")
         self.campos[campo].setFocus()
+
+    def cancelar_formulario(self):
+        self.garante_cancelado.emit()
+        self.close()
 
     def limpiar_formulario(self):
         for key, widget in self.campos.items():

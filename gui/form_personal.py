@@ -16,7 +16,8 @@ from utils.widgets_custom import parsear_fecha
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
 class FormPersonal(QWidget):
-    personal_guardado = Signal()
+    personal_guardado  = Signal()
+    personal_cancelado = Signal()
 
     def __init__(self, personal_id=None, usuario=None):
         super().__init__()
@@ -154,7 +155,7 @@ class FormPersonal(QWidget):
         layout.addLayout(botones_principales)
 
         self.btn_guardar.clicked.connect(self.guardar_personal)
-        self.btn_cancelar.clicked.connect(self.close)
+        self.btn_cancelar.clicked.connect(self.cancelar_formulario)
 
         self.setStyleSheet("""
             QWidget {
@@ -359,6 +360,10 @@ class FormPersonal(QWidget):
                 self.close()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el personal:\n{e}")
+
+    def cancelar_formulario(self):
+        self.personal_cancelado.emit()
+        self.close()
 
     def mostrar_alerta(self, campo):
         nombre_legible = campo.replace("_", " ").capitalize()

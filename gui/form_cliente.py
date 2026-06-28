@@ -15,7 +15,8 @@ from models import Cliente
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
 class FormCliente(QWidget):
-    cliente_guardado = Signal()
+    cliente_guardado  = Signal()
+    cliente_cancelado = Signal()
 
     def __init__(self, cliente_id=None):
         super().__init__()
@@ -298,6 +299,9 @@ class FormCliente(QWidget):
                     session.commit()
                 QMessageBox.information(self, "Eliminado", "Cliente eliminado correctamente")
                 self.close()
+            except IntegrityError:
+                QMessageBox.warning(self, "No se puede eliminar",
+                                    "Este cliente tiene ventas registradas y no puede eliminarse.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el cliente:\n{e}")
 
@@ -315,4 +319,5 @@ class FormCliente(QWidget):
             widget.setStyleSheet("")
 
     def cancelar_formulario(self):
+        self.cliente_cancelado.emit()
         self.close()

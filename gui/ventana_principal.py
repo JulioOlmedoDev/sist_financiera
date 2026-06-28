@@ -736,10 +736,16 @@ class VentanaPrincipal(QMainWindow):
 
     # ---------- Abrir formularios ----------
     def abrir_form_cliente(self):
-        self.mostrar_formulario(FormCliente(), "Gestión de Clientes")
+        formulario = FormCliente()
+        formulario.cliente_guardado.connect(self.abrir_gestion_clientes)
+        formulario.cliente_cancelado.connect(self.abrir_gestion_clientes)
+        self.mostrar_formulario(formulario, "Gestión de Clientes")
 
     def abrir_form_garante(self):
-        self.mostrar_formulario(FormGarante(), "Gestión de Garantes")
+        formulario = FormGarante()
+        formulario.garante_guardado.connect(self.abrir_gestion_garantes)
+        formulario.garante_cancelado.connect(self.abrir_gestion_garantes)
+        self.mostrar_formulario(formulario, "Gestión de Garantes")
 
     def abrir_form_venta(self):
         formulario = FormVenta(usuario_actual=self.usuario)
@@ -781,6 +787,7 @@ class VentanaPrincipal(QMainWindow):
     def abrir_form_personal(self):
         formulario = FormPersonal(usuario=self.usuario)
         formulario.personal_guardado.connect(self.abrir_gestion_personal)
+        formulario.personal_cancelado.connect(self.abrir_gestion_personal)
         self.mostrar_formulario(formulario, "Gestión de Personal")
 
     def abrir_form_usuario(self):
