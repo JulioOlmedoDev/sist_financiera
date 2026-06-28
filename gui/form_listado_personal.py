@@ -7,7 +7,6 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Personal
 from gui.form_personal import FormPersonal
-from sqlalchemy.exc import IntegrityError
 from utils.permisos import tiene_permiso, es_admin
 from utils.formato import formato_documento
 
@@ -83,10 +82,6 @@ class FormListadoPersonal(QWidget):
         header.setStretchLastSection(False)
         header.setSectionResizeMode(QHeaderView.Stretch)
 
-        # Forzamos ancho fijo para columna "Acciones"
-        header.setSectionResizeMode(5, QHeaderView.Fixed)
-        self.tabla.setColumnWidth(5, 220)
-
         layout.addWidget(self.tabla)
 
         # Info/leyenda
@@ -141,68 +136,18 @@ class FormListadoPersonal(QWidget):
                 QPushButton:hover { background-color: #7b1fa2; }
             """)
 
-            # Solo mostrar eliminar si el usuario tiene permiso para borrar (o es admin)
-            puede_eliminar = es_admin(self.usuario) or tiene_permiso(self.usuario, "0320 (ver/editar) listado de personal (eliminar)")
-            btn_eliminar = QPushButton("🗑 Eliminar") if puede_eliminar else None
-            if btn_eliminar:
-                btn_eliminar.setCursor(Qt.PointingHandCursor)
-                btn_eliminar.setToolTip("Eliminar personal")
-                btn_eliminar.setProperty("role", "eliminar")
-                btn_eliminar.setStyleSheet("""
-                    QPushButton { background-color: #e53935; color: white; padding: 6px 10px; border-radius: 6px; font-weight: bold; }
-                    QPushButton:hover { background-color: #c62828; }
-                """)
-
-            # Conexiones seguras (cierres sobre valores actuales)
             btn_editar.clicked.connect(lambda checked=False, pid=persona.id: self._abrir_edicion(pid))
-            if btn_eliminar:
-                btn_eliminar.clicked.connect(self._generar_callback_eliminar(persona.id))
 
-            # Contenedor horizontal para botones
             contenedor = QHBoxLayout()
             contenedor.setContentsMargins(6, 2, 6, 2)
             contenedor.setSpacing(8)
             contenedor.addWidget(btn_editar)
-            if btn_eliminar:
-                contenedor.addWidget(btn_eliminar)
             contenedor.addStretch()
 
             acciones_widget = QWidget()
             acciones_widget.setLayout(contenedor)
             self.tabla.setCellWidget(row, 5, acciones_widget)
 
-    def _generar_callback_eliminar(self, personal_id):
-        def callback(checked=False):
-            confirm = QMessageBox.question(
-                self, "Eliminar personal",
-                "¿Estás seguro de eliminar este personal? Esta acción es irreversible.",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
-            if confirm != QMessageBox.Yes:
-                return
-            try:
-                with get_session() as session:
-                    persona = session.get(Personal, personal_id)
-                    if not persona:
-                        QMessageBox.warning(self, "No encontrado", "El personal ya no existe.")
-                        self.actualizar_tabla()
-                        return
-                    session.delete(persona)
-                    session.commit()
-                QMessageBox.information(self, "Eliminado", "Personal eliminado correctamente.")
-                self.actualizar_tabla()
-            except IntegrityError as e:
-                if "usuarios" in str(e).lower():
-                    QMessageBox.warning(self, "No se puede eliminar",
-                                        "Este empleado tiene un usuario asignado. "
-                                        "Primero debe eliminarse el usuario.")
-                else:
-                    QMessageBox.warning(self, "No se puede eliminar",
-                                        "Este empleado participó en ventas registradas y no puede eliminarse.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"No se pudo eliminar:\n{e}")
-        return callback
-    
     def _abrir_edicion(self, personal_id):
         self.dlg_personal = FormPersonal(personal_id=personal_id, usuario=self.usuario)
         self.dlg_personal.personal_guardado.connect(self.actualizar_tabla)
