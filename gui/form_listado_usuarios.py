@@ -138,7 +138,7 @@ class FormListadoUsuarios(QWidget):
     def editar_usuario(self):
         usuario_id = self.usuario_seleccionado()
         if not usuario_id:
-            QMessageBox.warning(self, "Error", "Seleccioná un usuario.")
+            QMessageBox.warning(self, "Selección requerida", "Seleccioná un usuario de la lista.")
             return
         with get_session() as session:
             u = session.query(Usuario).get(usuario_id)
@@ -148,7 +148,7 @@ class FormListadoUsuarios(QWidget):
     def cambiar_estado_usuario(self):
         usuario_id = self.usuario_seleccionado()
         if not usuario_id:
-            QMessageBox.warning(self, "Error", "Seleccioná un usuario.")
+            QMessageBox.warning(self, "Selección requerida", "Seleccioná un usuario de la lista.")
             return
 
         from models import Rol as RolModel
@@ -160,6 +160,7 @@ class FormListadoUsuarios(QWidget):
                     return
                 activo = usuario.activo
                 rol_nombre = usuario.rol.nombre if usuario.rol else ""
+                nombre_usuario = usuario.nombre or "(sin nombre)"
 
                 if activo and rol_nombre == "Administrador":
                     admins_activos = session.query(Usuario).join(RolModel).filter(
@@ -176,12 +177,12 @@ class FormListadoUsuarios(QWidget):
 
             if activo:
                 confirmar = QMessageBox.question(
-                    self, "Desactivar", "¿Desactivar este usuario?",
+                    self, "Desactivar", f"¿Desactivar al usuario «{nombre_usuario}»?",
                     QMessageBox.Yes | QMessageBox.No
                 )
             else:
                 confirmar = QMessageBox.question(
-                    self, "Reactivar", "¿Reactivar este usuario?",
+                    self, "Reactivar", f"¿Reactivar al usuario «{nombre_usuario}»?",
                     QMessageBox.Yes | QMessageBox.No
                 )
 
@@ -193,8 +194,16 @@ class FormListadoUsuarios(QWidget):
                 if usuario:
                     usuario.activo = not activo
                     session.commit()
+            if activo:
+                QMessageBox.information(self, "Listo",
+                                        f"El usuario «{nombre_usuario}» fue desactivado.")
+            else:
+                QMessageBox.information(self, "Listo",
+                                        f"El usuario «{nombre_usuario}» fue reactivado.")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo cambiar el estado:\n{e}")
+            print(f"[ERROR cambiar_estado_usuario] {e}")
+            QMessageBox.critical(self, "Error",
+                                 "No se pudo cambiar el estado del usuario. Intentá nuevamente.")
 
         self.cargar_datos()
         self.actualizar_estado_boton()

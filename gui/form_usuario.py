@@ -262,7 +262,8 @@ class FormUsuario(QWidget):
                         return
 
                     if email and session.query(Usuario).filter_by(email=email).first():
-                        QMessageBox.warning(self, "Error", f"Ya existe un usuario con el email {email}.")
+                        QMessageBox.warning(self, "Email en uso",
+                                            f"Ya existe un usuario registrado con el email {email}.")
                         return
 
                     nuevo = Usuario(
@@ -278,7 +279,9 @@ class FormUsuario(QWidget):
                     QMessageBox.information(self, "Éxito", "Usuario creado correctamente.")
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo guardar el usuario:\n{e}")
+            print(f"[ERROR guardar_usuario] {e}")
+            QMessageBox.critical(self, "Error",
+                                 "No se pudo guardar el usuario. Verificá los datos e intentá nuevamente.")
             return
 
         self.usuario_guardado.emit()
