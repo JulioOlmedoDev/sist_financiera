@@ -7,6 +7,7 @@ from database import get_session
 from models import Usuario, Personal, Rol
 from utils.formato import formato_documento
 from utils.security import hash_password
+from utils.estilos import PALETA
 
 class FormUsuario(QWidget):
     usuario_guardado = Signal()
@@ -106,12 +107,19 @@ class FormUsuario(QWidget):
 
         botones = QHBoxLayout()
         botones.addStretch()
+        a = PALETA["acciones"]
 
         self.btn_cancelar = QPushButton("Cancelar")
-        self.btn_guardar = QPushButton("Guardar Usuario")
+        self.btn_guardar = QPushButton("Guardar")
 
-        self.btn_guardar.setStyleSheet("background-color: #4caf50; color: white;")
-        self.btn_cancelar.setStyleSheet("background-color: #ef9a9a; color: black;")
+        self.btn_guardar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['guardar']}; color: white; }}
+            QPushButton:hover {{ background-color: {a['guardar_hover']}; }}
+        """)
+        self.btn_cancelar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['cancelar']}; color: white; }}
+            QPushButton:hover {{ background-color: {a['cancelar_hover']}; }}
+        """)
 
         botones.addWidget(self.btn_cancelar)
         botones.addWidget(self.btn_guardar)

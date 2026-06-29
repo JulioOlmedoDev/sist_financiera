@@ -7,6 +7,7 @@ from database import get_session
 from models import Usuario, Personal, Rol
 from gui.form_usuario import FormUsuario
 from utils.dialogos import confirmar
+from utils.estilos import PALETA
 
 class FormListadoUsuarios(QWidget):
     def __init__(self, parent=None, usuario=None):
@@ -82,12 +83,19 @@ class FormListadoUsuarios(QWidget):
 
         botones = QHBoxLayout()
         botones.addStretch()
+        i = PALETA["identidad"]
 
-        self.btn_editar = QPushButton("Editar Usuario")
-        self.btn_editar.setStyleSheet("background-color: #7b1fa2; color: white;")
+        self.btn_editar = QPushButton("Editar")
+        self.btn_editar.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
 
         self.btn_estado = QPushButton("Activar/Desactivar")
-        self.btn_estado.setStyleSheet("background-color: #b0bec5; color: black;")
+        self.btn_estado.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
 
         self.btn_editar.clicked.connect(self.editar_usuario)
         self.btn_estado.clicked.connect(self.cambiar_estado_usuario)

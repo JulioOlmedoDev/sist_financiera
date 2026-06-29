@@ -9,6 +9,7 @@ from models import Personal
 from gui.form_personal import FormPersonal
 from utils.permisos import tiene_permiso, es_admin
 from utils.formato import formato_documento
+from utils.estilos import PALETA
 
 class FormListadoPersonal(QWidget):
     """
@@ -113,6 +114,7 @@ class FormListadoPersonal(QWidget):
                     filtrados.append(p)
 
         self.tabla.setRowCount(len(filtrados))
+        i = PALETA["identidad"]
 
         for row, persona in enumerate(filtrados):
             # ID (col 0)
@@ -127,13 +129,13 @@ class FormListadoPersonal(QWidget):
             self.tabla.setItem(row, 4, QTableWidgetItem(persona.tipo or ""))
 
             # Acciones (col 5)
-            btn_editar = QPushButton("✏️ Editar")
+            btn_editar = QPushButton("Editar")
             btn_editar.setCursor(Qt.PointingHandCursor)
             btn_editar.setToolTip("Editar personal")
             btn_editar.setProperty("role", "editar")
-            btn_editar.setStyleSheet("""
-                QPushButton { background-color: #9c27b0; color: white; padding: 6px 10px; border-radius: 6px; font-weight: bold; }
-                QPushButton:hover { background-color: #7b1fa2; }
+            btn_editar.setStyleSheet(f"""
+                QPushButton {{ background-color: {i['primario']}; color: white; padding: 6px 10px; border-radius: 6px; font-weight: bold; }}
+                QPushButton:hover {{ background-color: {i['primario_hover']}; }}
             """)
 
             btn_editar.clicked.connect(lambda checked=False, pid=persona.id: self._abrir_edicion(pid))
