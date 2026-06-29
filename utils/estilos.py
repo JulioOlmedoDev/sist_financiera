@@ -46,7 +46,7 @@ def generar_qss(paleta: dict) -> str:
     QPushButton {{
         background-color: {i['primario']};
         color: #ffffff;
-        padding: 8px 16px;
+        padding: 10px 20px;
         border-radius: 4px;
         font-weight: bold;
         border: none;

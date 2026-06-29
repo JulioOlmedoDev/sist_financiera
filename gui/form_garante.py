@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from database import get_session
 from models import Garante
 from utils.dialogos import confirmar
+from utils.estilos import PALETA
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -90,22 +91,15 @@ class FormGarante(QWidget):
         botones_principales = QHBoxLayout()
         botones_principales.setContentsMargins(0, 20, 0, 0)
         botones_principales.setSpacing(40)
+        a = PALETA["acciones"]
 
         if self.editando:
             eliminar_layout = QHBoxLayout()
             eliminar_layout.addWidget(QLabel())
-            self.btn_eliminar = QPushButton("Eliminar Garante")
-            self.btn_eliminar.setStyleSheet("""
-                QPushButton {
-                    background-color: #e53935;
-                    color: white;
-                    padding: 10px 20px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #c62828;
-                }
+            self.btn_eliminar = QPushButton("Eliminar")
+            self.btn_eliminar.setStyleSheet(f"""
+                QPushButton {{ background-color: {a['eliminar']}; }}
+                QPushButton:hover {{ background-color: {a['eliminar_hover']}; }}
             """)
             self.btn_eliminar.clicked.connect(self.eliminar_garante)
             eliminar_layout.addWidget(self.btn_eliminar)
@@ -116,7 +110,15 @@ class FormGarante(QWidget):
 
         acciones_layout = QHBoxLayout()
         self.btn_cancelar = QPushButton("Cancelar")
-        self.btn_guardar = QPushButton("Actualizar Garante" if self.editando else "Guardar Garante")
+        self.btn_guardar = QPushButton("Actualizar" if self.editando else "Guardar")
+        self.btn_cancelar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['cancelar']}; }}
+            QPushButton:hover {{ background-color: {a['cancelar_hover']}; }}
+        """)
+        self.btn_guardar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['guardar']}; }}
+            QPushButton:hover {{ background-color: {a['guardar_hover']}; }}
+        """)
         acciones_layout.addWidget(self.btn_cancelar)
         acciones_layout.addWidget(self.btn_guardar)
 
@@ -184,7 +186,7 @@ class FormGarante(QWidget):
                 elif isinstance(widget, ComboBoxSinScroll):
                     widget.setCurrentText(valor or "")
 
-        self.btn_guardar.setText("Actualizar Garante")
+        self.btn_guardar.setText("Actualizar")
 
     def guardar_garante(self):
         campos_requeridos = [

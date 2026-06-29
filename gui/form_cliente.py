@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from database import get_session
 from models import Cliente
 from utils.dialogos import confirmar
+from utils.estilos import PALETA
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -93,22 +94,15 @@ class FormCliente(QWidget):
         botones_principales = QHBoxLayout()
         botones_principales.setContentsMargins(0, 20, 0, 0)
         botones_principales.setSpacing(40)
+        a = PALETA["acciones"]
 
         if self.editando:
             eliminar_layout = QHBoxLayout()
             eliminar_layout.addWidget(QLabel())
-            self.btn_eliminar = QPushButton("Eliminar Cliente")
-            self.btn_eliminar.setStyleSheet("""
-                QPushButton {
-                    background-color: #e53935;
-                    color: white;
-                    padding: 10px 20px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #c62828;
-                }
+            self.btn_eliminar = QPushButton("Eliminar")
+            self.btn_eliminar.setStyleSheet(f"""
+                QPushButton {{ background-color: {a['eliminar']}; }}
+                QPushButton:hover {{ background-color: {a['eliminar_hover']}; }}
             """)
             self.btn_eliminar.clicked.connect(self.eliminar_cliente)
             eliminar_layout.addWidget(self.btn_eliminar)
@@ -119,7 +113,15 @@ class FormCliente(QWidget):
 
         acciones_layout = QHBoxLayout()
         self.btn_cancelar = QPushButton("Cancelar")
-        self.btn_guardar = QPushButton("Actualizar Cliente" if self.editando else "Guardar Cliente")
+        self.btn_guardar = QPushButton("Actualizar" if self.editando else "Guardar")
+        self.btn_cancelar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['cancelar']}; }}
+            QPushButton:hover {{ background-color: {a['cancelar_hover']}; }}
+        """)
+        self.btn_guardar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['guardar']}; }}
+            QPushButton:hover {{ background-color: {a['guardar_hover']}; }}
+        """)
         acciones_layout.addWidget(self.btn_cancelar)
         acciones_layout.addWidget(self.btn_guardar)
 
