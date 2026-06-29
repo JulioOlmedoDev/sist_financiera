@@ -17,6 +17,7 @@ from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
 from utils.formato import formato_documento
 from sqlalchemy import desc
+from utils.estilos import PALETA
 
 
 def _display_persona(obj) -> str:
@@ -39,8 +40,17 @@ class ConfirmarVentaDialog(QDialog):
 
         btns = QHBoxLayout()
         btns.addStretch()
+        a = PALETA["acciones"]
         self.btn_no = QPushButton("No")
         self.btn_si = QPushButton("Sí")
+        self.btn_no.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['cancelar']}; color: white; }}
+            QPushButton:hover {{ background-color: {a['cancelar_hover']}; }}
+        """)
+        self.btn_si.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['guardar']}; color: white; }}
+            QPushButton:hover {{ background-color: {a['guardar_hover']}; }}
+        """)
         self.btn_no.setDefault(True)  # por seguridad, default "No"
         self.btn_no.setAutoDefault(True)
         self.btn_no.clicked.connect(self.reject)
@@ -111,16 +121,25 @@ class FormVenta(QWidget):
             }
         """)
 
+        i = PALETA["identidad"]
+        a = PALETA["acciones"]
+
         # --- Cliente (requerido) ---
         lbl = QLabel("Cliente:"); lbl.setStyleSheet(label_style)
         self.cliente_input = QLineEdit()
         btns = QHBoxLayout()
         self.btn_nuevo_cliente = QPushButton("+")
-        self.btn_nuevo_cliente.setStyleSheet("background:#9c27b0;color:white;")
+        self.btn_nuevo_cliente.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
         self.btn_nuevo_cliente.setToolTip("Agregar un nuevo cliente")
 
-        self.btn_refresh_cliente = QPushButton("🔄")
-        self.btn_refresh_cliente.setStyleSheet("background:#673ab7;color:white;")
+        self.btn_refresh_cliente = QPushButton("↺")
+        self.btn_refresh_cliente.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
         self.btn_refresh_cliente.setToolTip("Actualizar listado de clientes")
 
         self.btn_nuevo_cliente.clicked.connect(self.abrir_form_cliente)
@@ -136,11 +155,17 @@ class FormVenta(QWidget):
         self.garante_input = QLineEdit()
         btns2 = QHBoxLayout()
         self.btn_nuevo_garante = QPushButton("+")
-        self.btn_nuevo_garante.setStyleSheet(self.btn_nuevo_cliente.styleSheet())
+        self.btn_nuevo_garante.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
         self.btn_nuevo_garante.setToolTip("Agregar un nuevo garante")
 
-        self.btn_refresh_garante = QPushButton("🔄")
-        self.btn_refresh_garante.setStyleSheet(self.btn_refresh_cliente.styleSheet())
+        self.btn_refresh_garante = QPushButton("↺")
+        self.btn_refresh_garante.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
         self.btn_refresh_garante.setToolTip("Actualizar listado de garantes")
 
         self.btn_nuevo_garante.clicked.connect(self.abrir_form_garante)
@@ -210,7 +235,10 @@ class FormVenta(QWidget):
 
         # --- Calcular PTF / Interés (requerido antes de guardar) ---
         self.btn_calcular = QPushButton("Calcular PTF / Interés")
-        self.btn_calcular.setStyleSheet("background:#9c27b0;color:white;")
+        self.btn_calcular.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
         self.btn_calcular.setToolTip("Calcular Precio Total Financiado e interés")
         self.btn_calcular.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_calcular.clicked.connect(self.calcular_ptf)
@@ -247,8 +275,11 @@ class FormVenta(QWidget):
             ))
 
         # — Guardar (misma columna, un poco más alto) —
-        self.btn_guardar = QPushButton("Guardar Venta" if not venta_id else "Actualizar Venta")
-        self.btn_guardar.setStyleSheet("background:#9c27b0;color:white;")
+        self.btn_guardar = QPushButton("Guardar" if not venta_id else "Actualizar")
+        self.btn_guardar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['guardar']}; color: white; }}
+            QPushButton:hover {{ background-color: {a['guardar_hover']}; }}
+        """)
         self.btn_guardar.setToolTip("Guardar la venta")
         self.btn_guardar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_guardar.clicked.connect(self.guardar_venta)
