@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, Signal
 from database import get_session
 from models import Categoria, Producto
 from utils.guards import require_perm_or_close
+from utils.dialogos import confirmar
 
 class FormCategoria(QDialog):
     category_action_completed = Signal(str, int)
@@ -410,14 +411,8 @@ class FormCategoria(QDialog):
                     return
 
                 nombre_cat = categoria.nombre
-                confirm = QMessageBox.question(
-                    self,
-                    "Confirmar eliminación",
-                    f"¿Estás seguro de eliminar la categoría '{nombre_cat}'?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                if confirm == QMessageBox.Yes:
+                if confirmar(self, "Confirmar eliminación",
+                             f"¿Estás seguro de eliminar la categoría '{nombre_cat}'?"):
                     session.delete(categoria)
                     session.commit()
                     print("DEBUG: Categoría eliminada OK")

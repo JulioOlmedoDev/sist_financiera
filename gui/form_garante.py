@@ -11,6 +11,7 @@ from utils.widgets_custom import ComboBoxSinScroll, parsear_fecha
 from sqlalchemy.exc import IntegrityError
 from database import get_session
 from models import Garante
+from utils.dialogos import confirmar
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -303,8 +304,7 @@ class FormGarante(QWidget):
             QMessageBox.critical(self, "Error", f"No se pudo guardar el garante:\n{e}")
 
     def eliminar_garante(self):
-        confirmacion = QMessageBox.question(self, "Eliminar", "¿Estás seguro de eliminar este garante?", QMessageBox.Yes | QMessageBox.No)
-        if confirmacion == QMessageBox.Yes:
+        if confirmar(self, "Eliminar", "¿Estás seguro de eliminar este garante?"):
             try:
                 with get_session() as session:
                     garante = session.query(Garante).get(self.garante_id)

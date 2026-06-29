@@ -10,6 +10,7 @@ from gui.form_producto import FormProducto
 from utils.guards import require_perm_or_close
 from utils.permisos import tiene_permiso_match
 from sqlalchemy.exc import IntegrityError
+from utils.dialogos import confirmar
 
 
 class FormListadoProductos(QWidget):
@@ -500,14 +501,8 @@ class FormListadoProductos(QWidget):
                 )
                 return
 
-            confirm = QMessageBox.question(
-                self,
-                "Confirmar eliminación",
-                f"¿Estás seguro de eliminar la categoría '{cat_nombre}'?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if confirm != QMessageBox.Yes:
+            if not confirmar(self, "Confirmar eliminación",
+                             f"¿Estás seguro de eliminar la categoría '{cat_nombre}'?"):
                 return
 
             with get_session() as session:
@@ -531,14 +526,8 @@ class FormListadoProductos(QWidget):
                     return
                 prod_nombre = prod.nombre
 
-            confirm = QMessageBox.question(
-                self,
-                "Confirmar eliminación",
-                f"¿Estás seguro de eliminar el producto '{prod_nombre}'?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if confirm != QMessageBox.Yes:
+            if not confirmar(self, "Confirmar eliminación",
+                             f"¿Estás seguro de eliminar el producto '{prod_nombre}'?"):
                 return
 
             with get_session() as session:

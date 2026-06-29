@@ -4,6 +4,7 @@ from database import get_session
 from models import Usuario
 from gui.change_password_dialog import ChangePasswordDialog
 from gui.two_factor_setup import TwoFactorSetupDialog
+from utils.dialogos import confirmar
 
 class FormMiPerfil(QWidget):
     def __init__(self, usuario_actual):
@@ -72,10 +73,8 @@ class FormMiPerfil(QWidget):
                 )
                 return
             # Desactivar
-            ok = QMessageBox.question(self, "Confirmar",
-                                      "¿Seguro que querés desactivar el ingreso con token (2FA)?",
-                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if ok == QMessageBox.Yes:
+            if confirmar(self, "Confirmar",
+                         "¿Seguro que querés desactivar el ingreso con token (2FA)?"):
                 self.usuario.totp_enabled = False
                 self.usuario.totp_secret = None
                 try:

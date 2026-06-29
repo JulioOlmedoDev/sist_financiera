@@ -15,6 +15,7 @@ from models import Venta, Cuota, Cobro, Usuario
 from utils.formato import formato_documento
 from sqlalchemy.orm import joinedload
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll, DoubleSpinBoxSinScroll
+from utils.dialogos import confirmar
 
 # ---------- Constantes de layout fijo ----------
 HEIGHT_SEARCH   = 30   # Buscar Venta (alto de controles)
@@ -526,20 +527,16 @@ class FormCobro(QWidget):
             f"<b>Obs.:</b> {obs}" if obs else ""
         ]).strip(" &nbsp;•&nbsp;")
 
-        mb = QMessageBox(self)
-        mb.setWindowTitle("Confirmar registro de cobro")
-        mb.setIcon(QMessageBox.Question)
-        mb.setTextFormat(Qt.RichText)
-        mb.setText(
+        if not confirmar(
+            self,
+            "Confirmar registro de cobro",
             f"Está a punto de registrar un cobro por {monto_html} en la venta <b>{venta_nro}</b>."
             "<br><br>"
             f"{detalle_html}"
             "<br><br>"
-            "¿Desea continuar?"
-        )
-        mb.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        mb.setDefaultButton(QMessageBox.No)
-        if mb.exec() != QMessageBox.Yes:
+            "¿Desea continuar?",
+            rich_text=True
+        ):
             return
         # =====================================
 
@@ -619,17 +616,13 @@ class FormCobro(QWidget):
                            for c in cuotas_mora)
 
         if mora_normal or mora_en_mora:
-            resp = QMessageBox.question(self, "Cuotas con Mora",
-                                        "¿Deseás generar cuotas por mora antes de finalizar?",
-                                        QMessageBox.Yes | QMessageBox.No)
-            if resp == QMessageBox.Yes:
+            if confirmar(self, "Cuotas con Mora",
+                         "¿Deseás generar cuotas por mora antes de finalizar?"):
                 return
             if mora_en_mora:
-                resp = QMessageBox.question(self, "Mora en mora",
-                                            "Las cuotas por mora también fueron pagadas fuera de término.\n"
-                                            "¿Deseás generar nuevas cuotas por mora?",
-                                            QMessageBox.Yes | QMessageBox.No)
-                if resp == QMessageBox.Yes:
+                if confirmar(self, "Mora en mora",
+                             "Las cuotas por mora también fueron pagadas fuera de término.\n"
+                             "¿Deseás generar nuevas cuotas por mora?"):
                     return
 
         opciones = ["Excelente", "Bueno", "Riesgoso", "Incobrable"]

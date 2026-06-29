@@ -8,6 +8,7 @@ from models import Producto, Categoria
 from sqlalchemy.exc import IntegrityError
 from utils.guards import require_perm_or_close
 from utils.permisos import tiene_permiso_match
+from utils.dialogos import confirmar
 
 class FormProducto(QDialog):  # ...
     def __init__(self, producto_id=None, parent=None, usuario=None):
@@ -393,8 +394,7 @@ class FormProducto(QDialog):  # ...
             return
 
         """Elimina el producto después de confirmación."""
-        confirm = QMessageBox.question(self, "Eliminar", "¿Eliminar este producto?", QMessageBox.Yes | QMessageBox.No)
-        if confirm == QMessageBox.Yes:
+        if confirmar(self, "Eliminar", "¿Eliminar este producto?"):
             try:
                 with get_session() as session:
                     producto = session.get(Producto, self.producto_id)

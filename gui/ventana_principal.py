@@ -32,6 +32,7 @@ from gui.form_recuperar_acceso import FormRecuperarAcceso
 from gui.lock_screen import LockScreenDialog
 from models import Personal
 from zoneinfo import ZoneInfo
+from utils.dialogos import confirmar
 
 
 class BotonNavegacion(QPushButton):
@@ -835,11 +836,7 @@ class VentanaPrincipal(QMainWindow):
     # ---------- Diálogos y sesión ----------
     def cerrar_sesion(self):
         from PySide6.QtWidgets import QApplication
-        confirm = QMessageBox.question(
-            self, "Cerrar sesión", "¿Estás seguro de que querés cerrar sesión?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if confirm == QMessageBox.Yes:
+        if confirmar(self, "Cerrar sesión", "¿Estás seguro de que querés cerrar sesión?"):
             QApplication.quit()
 
     def abrir_dialog_tasas(self):
@@ -906,14 +903,8 @@ class VentanaPrincipal(QMainWindow):
             if t:
                 t.stop()
 
-            resp = QMessageBox.question(
-                self,
-                "Sesión inactiva",
-                f"Pasaron más de {self._idle_minutes} minutos sin actividad.\n¿Querés continuar la sesión?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if resp == QMessageBox.Yes:
+            if confirmar(self, "Sesión inactiva",
+                         f"Pasaron más de {self._idle_minutes} minutos sin actividad.\n¿Querés continuar la sesión?"):
                 self._reset_idle_timer()  # única rearmada
             else:
                 QApplication.quit()
@@ -1085,12 +1076,8 @@ class VentanaPrincipal(QMainWindow):
                 "Solicitá a un usuario autorizado que lo gestione desde Recuperar acceso."
             )
             return
-        ok = QMessageBox.question(
-            self, "Desactivar ingreso con token",
-            "¿Seguro que querés desactivar el ingreso con token (2FA) para tu cuenta?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        if ok != QMessageBox.Yes:
+        if not confirmar(self, "Desactivar ingreso con token",
+                         "¿Seguro que querés desactivar el ingreso con token (2FA) para tu cuenta?"):
             return
         try:
             with get_session() as _s:

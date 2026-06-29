@@ -11,6 +11,7 @@ from utils.widgets_custom import ComboBoxSinScroll, parsear_fecha
 from sqlalchemy.exc import IntegrityError
 from database import get_session
 from models import Cliente
+from utils.dialogos import confirmar
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -290,8 +291,7 @@ class FormCliente(QWidget):
             QMessageBox.critical(self, "Error", f"No se pudo guardar el cliente:\n{e}")
 
     def eliminar_cliente(self):
-        confirmacion = QMessageBox.question(self, "Eliminar", "¿Estás seguro de eliminar este cliente?", QMessageBox.Yes | QMessageBox.No)
-        if confirmacion == QMessageBox.Yes:
+        if confirmar(self, "Eliminar", "¿Estás seguro de eliminar este cliente?"):
             try:
                 with get_session() as session:
                     cliente = session.query(Cliente).get(self.cliente_id)

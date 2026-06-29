@@ -9,6 +9,7 @@ from models import Usuario, Personal
 from utils.permisos import tiene_permiso, es_admin
 from datetime import datetime
 from utils.security import hash_password
+from utils.dialogos import confirmar
 
 
 class FormRecuperarAcceso(QWidget):
@@ -218,14 +219,12 @@ class FormRecuperarAcceso(QWidget):
                 return
             nombre_usuario = user.nombre
 
-        ok = QMessageBox.question(
+        if not confirmar(
             self, "Confirmar imposición de token",
             f"¿Imponer el token de seguridad a «{nombre_usuario}»?\n\n"
             "Se le exigirá configurar el 2FA en su próximo login si aún no lo tiene.\n"
-            "Si ya lo tenía activo, quedará marcado como impuesto por política de la empresa.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        if ok != QMessageBox.Yes:
+            "Si ya lo tenía activo, quedará marcado como impuesto por política de la empresa."
+        ):
             return
 
         try:
@@ -261,14 +260,12 @@ class FormRecuperarAcceso(QWidget):
                 return
             nombre_usuario = user.nombre
 
-        ok = QMessageBox.question(
+        if not confirmar(
             self, "Confirmar desactivación de token",
             f"¿Desactivar el token de seguridad de «{nombre_usuario}»?\n\n"
             "Se eliminarán la configuración del token y la exigencia de 2FA.\n"
-            "El secreto del autenticador quedará invalidado (útil ante celular perdido).",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        if ok != QMessageBox.Yes:
+            "El secreto del autenticador quedará invalidado (útil ante celular perdido)."
+        ):
             return
 
         try:

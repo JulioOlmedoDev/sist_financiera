@@ -16,6 +16,7 @@ import os
 import platform
 import unicodedata
 from sqlalchemy import desc
+from utils.dialogos import confirmar
 
 
 class FormVentas(QWidget):
@@ -280,18 +281,12 @@ class FormVentas(QWidget):
             QMessageBox.warning(self, "No editable", "No se puede editar una venta anulada.")
             return
         if finalizada:
-            if QMessageBox.question(
-                self, "Edición limitada",
-                "Solo podés cambiar calificaciones. ¿Continuar?",
-                QMessageBox.Yes | QMessageBox.No
-            ) != QMessageBox.Yes:
+            if not confirmar(self, "Edición limitada",
+                             "Solo podés cambiar calificaciones. ¿Continuar?"):
                 return
         else:
-            if QMessageBox.question(
-                self, "Edición limitada",
-                "Solo podés marcar anulada. ¿Continuar?",
-                QMessageBox.Yes | QMessageBox.No
-            ) != QMessageBox.Yes:
+            if not confirmar(self, "Edición limitada",
+                             "Solo podés marcar anulada. ¿Continuar?"):
                 return
 
         self.form = FormVenta(venta_id=venta_id)

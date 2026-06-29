@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Usuario, Personal, Rol
 from gui.form_usuario import FormUsuario
+from utils.dialogos import confirmar
 
 class FormListadoUsuarios(QWidget):
     def __init__(self, parent=None, usuario=None):
@@ -176,17 +177,11 @@ class FormListadoUsuarios(QWidget):
                         return
 
             if activo:
-                confirmar = QMessageBox.question(
-                    self, "Desactivar", f"¿Desactivar al usuario «{nombre_usuario}»?",
-                    QMessageBox.Yes | QMessageBox.No
-                )
+                ok = confirmar(self, "Desactivar", f"¿Desactivar al usuario «{nombre_usuario}»?")
             else:
-                confirmar = QMessageBox.question(
-                    self, "Reactivar", f"¿Reactivar al usuario «{nombre_usuario}»?",
-                    QMessageBox.Yes | QMessageBox.No
-                )
+                ok = confirmar(self, "Reactivar", f"¿Reactivar al usuario «{nombre_usuario}»?")
 
-            if confirmar != QMessageBox.Yes:
+            if not ok:
                 return
 
             with get_session() as session:

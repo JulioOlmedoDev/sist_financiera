@@ -77,3 +77,25 @@ def generar_qss(paleta: dict) -> str:
         padding: 4px;
     }}
     """
+
+
+def qss_boton_dialogo(paleta: dict) -> str:
+    """QSS para botones de confirmar(). Se aplica directo sobre el QPushButton."""
+    i = paleta["identidad"]
+    return f"""
+        QPushButton {{
+            background-color: {i['primario']};
+            color: #ffffff;
+            padding: 8px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            border: none;
+            min-width: 64px;
+        }}
+        QPushButton:hover {{
+            background-color: {i['primario_hover']};
+        }}
+        QPushButton:pressed {{
+            background-color: {i['primario_pressed']};
+        }}
+    """

@@ -12,6 +12,7 @@ from database import get_session
 from models import Personal
 from utils.permisos import es_admin, tiene_permiso
 from utils.widgets_custom import parsear_fecha
+from utils.dialogos import confirmar
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -349,8 +350,7 @@ class FormPersonal(QWidget):
             QMessageBox.critical(self, "Error", f"No se pudo guardar el personal:\n{e}")
 
     def eliminar_personal(self):
-        confirmacion = QMessageBox.question(self, "Eliminar", "¿Estás seguro de eliminar este personal?", QMessageBox.Yes | QMessageBox.No)
-        if confirmacion == QMessageBox.Yes:
+        if confirmar(self, "Eliminar", "¿Estás seguro de eliminar este personal?"):
             try:
                 with get_session() as session:
                     personal = session.query(Personal).get(self.personal_id)
