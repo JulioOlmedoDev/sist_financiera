@@ -16,6 +16,7 @@ from utils.formato import formato_documento
 from sqlalchemy.orm import joinedload
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll, DoubleSpinBoxSinScroll
 from utils.dialogos import confirmar
+from utils.estilos import PALETA
 
 # ---------- Constantes de layout fijo ----------
 HEIGHT_SEARCH   = 30   # Buscar Venta (alto de controles)
@@ -108,10 +109,18 @@ class FormCobro(QWidget):
         fila_busqueda.setContentsMargins(0, 0, 0, 0)
         fila_busqueda.setSpacing(8)
 
+        i = PALETA["identidad"]
+        a = PALETA["acciones"]
+        e = PALETA["especial"]
+
         lbl_buscar = QLabel("Buscar Venta:")
         self.buscador = QLineEdit()
         self.buscador.setPlaceholderText("Apellido, N° doc o #ID (ej.: Pérez · 30123456 · #125)")
         self.btn_cargar_busqueda = QPushButton("Cargar")
+        self.btn_cargar_busqueda.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
 
         # Alturas y policies fijos
         for w in (lbl_buscar, self.buscador, self.btn_cargar_busqueda):
@@ -309,28 +318,28 @@ class FormCobro(QWidget):
         botones.setContentsMargins(0, 0, 0, 0)
         botones.setSpacing(8)
 
-        self.btn_guardar = QPushButton("Registrar Cobro")
-        self.btn_guardar.setStyleSheet("""
-            QPushButton { background-color: #4CAF50; color: white; border-radius: 5px; padding: 6px 12px; font-weight: bold; }
-            QPushButton:hover { background-color: #45a049; }
+        self.btn_guardar = QPushButton("Registrar")
+        self.btn_guardar.setStyleSheet(f"""
+            QPushButton {{ background-color: {a['guardar']}; color: white; border-radius: 5px; padding: 6px 12px; font-weight: bold; }}
+            QPushButton:hover {{ background-color: {a['guardar_hover']}; }}
         """)
         self.btn_guardar.clicked.connect(self.registrar_cobro)
         botones.addWidget(self.btn_guardar)
 
         self.btn_finalizar = QPushButton("Finalizar Venta")
         self.btn_finalizar.setEnabled(False)
-        self.btn_finalizar.setStyleSheet("""
-            QPushButton { background-color: #9E9E9E; color: white; border-radius: 5px; padding: 6px 12px; font-weight: bold; }
-            QPushButton:hover { background-color: #7E7E7E; }
+        self.btn_finalizar.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; border-radius: 5px; padding: 6px 12px; font-weight: bold; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
         """)
         self.btn_finalizar.clicked.connect(self.finalizar_venta)
         botones.addWidget(self.btn_finalizar)
 
         self.btn_mora = QPushButton("Agregar Cuota por Mora")
         self.btn_mora.setEnabled(False)
-        self.btn_mora.setStyleSheet("""
-            QPushButton { background-color: #FFEB3B; color: black; border-radius: 5px; padding: 6px 12px; font-weight: bold; }
-            QPushButton:hover { background-color: #FDD835; }
+        self.btn_mora.setStyleSheet(f"""
+            QPushButton {{ background-color: {e['atencion']}; color: black; border-radius: 5px; padding: 6px 12px; font-weight: bold; }}
+            QPushButton:hover {{ background-color: {e['atencion_hover']}; }}
         """)
         self.btn_mora.clicked.connect(self.agregar_cuota_mora)
         botones.addWidget(self.btn_mora)
