@@ -118,7 +118,7 @@ class FormCobro(QWidget):
         self.buscador.setPlaceholderText("Apellido, N° doc o #ID (ej.: Pérez · 30123456 · #125)")
         self.btn_cargar_busqueda = QPushButton("Cargar")
         self.btn_cargar_busqueda.setStyleSheet(f"""
-            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton {{ background-color: {i['primario']}; color: white; padding: 2px 8px; }}
             QPushButton:hover {{ background-color: {i['primario_hover']}; }}
         """)
 
