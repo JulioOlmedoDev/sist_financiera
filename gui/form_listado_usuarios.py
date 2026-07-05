@@ -32,7 +32,6 @@ class FormListadoUsuarios(QWidget):
             return
 
         self.setWindowTitle("Listado de Usuarios")
-        self.setMinimumSize(900, 500)
 
         self.setStyleSheet("""
             QWidget {

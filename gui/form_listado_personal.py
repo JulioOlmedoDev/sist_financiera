@@ -40,7 +40,6 @@ class FormListadoPersonal(QWidget):
 
         self.usuario = usuario
         self.setWindowTitle("Listado de Personal")
-        self.setMinimumSize(1100, 600)
 
         # Layout principal
         layout = QVBoxLayout(self)
