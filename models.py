@@ -100,7 +100,7 @@ class Garante(Base):
     celular_personal = Column(String(50))
     celular_trabajo = Column(String(50))
     email = Column(String(100))
-    calificacion = Column(Integer)
+    calificacion = Column(String(20))
     descripcion = Column(Text)
 
 class Categoria(Base):
