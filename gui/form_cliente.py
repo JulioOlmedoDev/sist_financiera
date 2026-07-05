@@ -26,7 +26,6 @@ class FormCliente(QWidget):
         self.editando = cliente_id is not None
 
         self.setWindowTitle("Gestión de Clientes")
-        self.showMaximized()
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)

@@ -40,8 +40,6 @@ class FormUsuario(QWidget):
         self.usuario_existente_id = None  # ID del usuario existente (si aplica)
         self._roles = []  # cache de roles para buscar id/nombre
 
-        self.showMaximized()
-
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         contenido = QWidget()

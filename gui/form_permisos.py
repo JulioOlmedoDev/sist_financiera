@@ -105,7 +105,6 @@ class FormPermisos(QWidget):
         self.setWindowTitle("Gestión de Permisos")
         self.setMinimumSize(980, 680)
         self.setStyleSheet(self.estilo_general())
-        self.showMaximized()
 
         self.permisos_checkboxes = {}  # nombre_permiso -> QCheckBox
         self.perm_objs = {}            # nombre_permiso -> Permiso (detachado, solo se usa el .id)
