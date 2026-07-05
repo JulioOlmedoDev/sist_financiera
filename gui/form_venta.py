@@ -94,6 +94,7 @@ class FormVenta(QWidget):
 
         # --- Form ---
         self.form = QFormLayout()
+        self.form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.form.setVerticalSpacing(12)
         self.form.setHorizontalSpacing(15)
         self.form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -127,6 +128,7 @@ class FormVenta(QWidget):
         # --- Cliente (requerido) ---
         lbl = QLabel("Cliente:"); lbl.setStyleSheet(label_style)
         self.cliente_input = QLineEdit()
+        self.cliente_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         btns = QHBoxLayout()
         self.btn_nuevo_cliente = QPushButton("+")
         self.btn_nuevo_cliente.setStyleSheet(f"""
@@ -153,6 +155,7 @@ class FormVenta(QWidget):
         # --- Garante (opcional) ---
         lbl = QLabel("Garante:"); lbl.setStyleSheet(label_style)
         self.garante_input = QLineEdit()
+        self.garante_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         btns2 = QHBoxLayout()
         self.btn_nuevo_garante = QPushButton("+")
         self.btn_nuevo_garante.setStyleSheet(f"""
@@ -179,11 +182,13 @@ class FormVenta(QWidget):
         # --- Producto / Plan (requeridos) ---
         lbl = QLabel("Producto:"); lbl.setStyleSheet(label_style)
         self.producto_combo = ComboBoxSinScroll()
+        self.producto_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.form.addRow(lbl, self.producto_combo)
 
         lbl = QLabel("Plan de Pago:"); lbl.setStyleSheet(label_style)
         self.plan_pago_combo = ComboBoxSinScroll()
         self.plan_pago_combo.addItems(["mensual", "semanal", "diaria"])
+        self.plan_pago_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.form.addRow(lbl, self.plan_pago_combo)
 
         # --- Personal (requerido) ---
@@ -192,6 +197,7 @@ class FormVenta(QWidget):
                            ("Cobrador:", 'cobrador_combo')]:
             lbl = QLabel(text); lbl.setStyleSheet(label_style)
             setattr(self, attr, ComboBoxSinScroll())
+            getattr(self, attr).setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             self.form.addRow(lbl, getattr(self, attr))
 
         # --- Monto / Cuotas / Valor (requeridos y > 0) ---
@@ -204,6 +210,7 @@ class FormVenta(QWidget):
                 w.setPrefix("$ "); w.setMaximum(1e9); w.setDecimals(2)
             else:
                 w.setMaximum(60)
+            w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             setattr(self, attr, w)
             w.installEventFilter(self)
             self.form.addRow(lbl, w)
@@ -213,6 +220,7 @@ class FormVenta(QWidget):
         self.tem_input = QDoubleSpinBox(self); self.tem_input.setDecimals(3)
         self.tem_input.setRange(0, 100); self.tem_input.setSuffix(" %")
         self.tem_input.installEventFilter(self)
+        self.tem_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.tem_input.valueChanged.connect(self._tasas_changed)
         self.form.addRow(lbl, self.tem_input)
 
@@ -220,6 +228,7 @@ class FormVenta(QWidget):
         self.tna_input = QDoubleSpinBox(self); self.tna_input.setDecimals(3)
         self.tna_input.setRange(0, 300); self.tna_input.setSuffix(" %")
         self.tna_input.installEventFilter(self)
+        self.tna_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.tna_input.valueChanged.connect(self._tasas_changed)
         self.form.addRow(lbl, self.tna_input)
 
@@ -227,6 +236,7 @@ class FormVenta(QWidget):
         self.tea_input = QDoubleSpinBox(self); self.tea_input.setDecimals(3)
         self.tea_input.setRange(0, 300); self.tea_input.setSuffix(" %")
         self.tea_input.installEventFilter(self)
+        self.tea_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.tea_input.valueChanged.connect(self._tasas_changed)
         self.form.addRow(lbl, self.tea_input)
 
@@ -248,6 +258,7 @@ class FormVenta(QWidget):
         for text, attr in [("PTF:", 'ptf_output'), ("Interés (%):", 'interes_output')]:
             lbl = QLabel(text); lbl.setStyleSheet(label_style)
             out = QLineEdit(readOnly=True); out.setStyleSheet("background:#f5f5f5;")
+            out.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             setattr(self, attr, out)
             self.form.addRow(lbl, out)
 
@@ -255,10 +266,12 @@ class FormVenta(QWidget):
         lbl = QLabel("Fecha de Primer Pago:"); lbl.setStyleSheet(label_style)
         self.fecha_inicio_input = DateEditSinScroll(QDate.currentDate())
         self.fecha_inicio_input.setCalendarPopup(True)
+        self.fecha_inicio_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.form.addRow(lbl, self.fecha_inicio_input)
 
         lbl = QLabel("Domicilio de Cobro:"); lbl.setStyleSheet(label_style)
         self.domicilio_combo = ComboBoxSinScroll(); self.domicilio_combo.addItems(["personal", "laboral"])
+        self.domicilio_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.form.addRow(lbl, self.domicilio_combo)
 
         # — Anulación (si es edición) —
