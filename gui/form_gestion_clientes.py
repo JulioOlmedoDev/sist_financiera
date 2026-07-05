@@ -7,6 +7,7 @@ from database import get_session
 from models import Cliente
 from gui.form_cliente import FormCliente
 from utils.formato import formato_documento
+from utils.estilos import PALETA
 
 class FormGestionClientes(QWidget):
     def __init__(self):
@@ -53,16 +54,6 @@ class FormGestionClientes(QWidget):
                 border: 1px solid #dddddd;
                 border-radius: 6px;
                 font-size: 14px;
-            }
-            QPushButton {
-                background-color: #9c27b0;
-                color: white;
-                padding: 4px 12px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
             }
         """)
 
@@ -140,6 +131,19 @@ class FormGestionClientes(QWidget):
 
                 # Botón de acción
                 btn_editar = QPushButton("Editar")
+                i = PALETA["identidad"]
+                btn_editar.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {i['primario']};
+                        color: white;
+                        padding: 4px 12px;
+                        border: none;
+                        border-radius: 4px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {i['primario_hover']};
+                    }}
+                """)
                 btn_editar.clicked.connect(self.generar_callback_editar(cliente.id))
 
                 acciones_layout = QHBoxLayout()
