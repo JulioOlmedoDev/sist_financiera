@@ -133,17 +133,24 @@ class FormListadoPersonal(QWidget):
             btn_editar.setToolTip("Editar personal")
             btn_editar.setProperty("role", "editar")
             btn_editar.setStyleSheet(f"""
-                QPushButton {{ background-color: {i['primario']}; color: white; padding: 6px 10px; border-radius: 6px; font-weight: bold; }}
-                QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+                QPushButton {{
+                    background-color: {i['primario']};
+                    color: white;
+                    padding: 4px 12px;
+                    border: none;
+                    border-radius: 4px;
+                }}
+                QPushButton:hover {{
+                    background-color: {i['primario_hover']};
+                }}
             """)
 
             btn_editar.clicked.connect(lambda checked=False, pid=persona.id: self._abrir_edicion(pid))
 
             contenedor = QHBoxLayout()
-            contenedor.setContentsMargins(6, 2, 6, 2)
-            contenedor.setSpacing(8)
+            contenedor.setContentsMargins(0, 0, 0, 0)
+            contenedor.setSpacing(5)
             contenedor.addWidget(btn_editar)
-            contenedor.addStretch()
 
             acciones_widget = QWidget()
             acciones_widget.setLayout(contenedor)
