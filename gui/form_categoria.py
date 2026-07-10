@@ -8,6 +8,7 @@ from database import get_session
 from models import Categoria, Producto
 from utils.guards import require_perm_or_close
 from utils.dialogos import confirmar
+from utils.estilos import PALETA
 
 class FormCategoria(QDialog):
     category_action_completed = Signal(str, int)
@@ -38,35 +39,35 @@ class FormCategoria(QDialog):
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
 
         # Aplicar estilos consistentes
-        self.setStyleSheet("""
-            QDialog { /* Cambiado a QDialog */
+        self.setStyleSheet(f"""
+            QDialog {{ /* Cambiado a QDialog */
                 background-color: #fdfdfd;
                 font-size: 14px;
                 font-family: Arial, sans-serif;
-            }
-            QFrame[objectName="main_card"] {
+            }}
+            QFrame[objectName="main_card"] {{
                 background-color: #f3e5f5;
                 border: 2px solid #9c27b0;
                 border-radius: 12px;
                 padding: 0px;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 color: #333;
                 font-weight: bold;
-            }
-            QLineEdit {
+            }}
+            QLineEdit {{
                 padding: 10px;
                 border: 1px solid #ccc;
                 border-radius: 4px;
                 font-size: 14px;
                 background-color: #fff;
                 min-height: 20px;
-            }
-            QLineEdit:focus {
+            }}
+            QLineEdit:focus {{
                 border: 2px solid #9c27b0;
-            }
-            QPushButton {
-                background-color: #9c27b0;
+            }}
+            QPushButton {{
+                background-color: {PALETA['identidad']['primario']};
                 color: white;
                 padding: 10px 20px;
                 border-radius: 4px;
@@ -74,13 +75,13 @@ class FormCategoria(QDialog):
                 font-size: 13px;
                 min-height: 30px;
                 border: none;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
-            }
-            QPushButton:pressed {
-                background-color: #6a1b9a;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {PALETA['identidad']['primario_hover']};
+            }}
+            QPushButton:pressed {{
+                background-color: {PALETA['identidad']['primario_pressed']};
+            }}
         """)
         
         # Layout principal de la ventana
@@ -172,43 +173,43 @@ class FormCategoria(QDialog):
             botones_principales = QHBoxLayout()
             
             # Botón eliminar a la izquierda
-            self.btn_eliminar = QPushButton("🗑️ Eliminar")
-            self.btn_eliminar.setStyleSheet("""
-                QPushButton {
-                    background-color: #e53935;
+            self.btn_eliminar = QPushButton("Eliminar")
+            self.btn_eliminar.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {PALETA['acciones']['eliminar']};
                     min-width: 140px;
-                }
-                QPushButton:hover {
-                    background-color: #c62828;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {PALETA['acciones']['eliminar_hover']};
+                }}
             """)
             self.btn_eliminar.clicked.connect(self.eliminar_categoria)
             botones_principales.addWidget(self.btn_eliminar)
-            
+
             botones_principales.addStretch()
-            
+
             # Botones principales a la derecha
             self.btn_cancelar = QPushButton("Cancelar")
-            self.btn_cancelar.setStyleSheet("""
-                QPushButton {
-                    background-color: #757575;
+            self.btn_cancelar.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {PALETA['acciones']['cancelar']};
                     min-width: 80px;
-                }
-                QPushButton:hover {
-                    background-color: #616161;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {PALETA['acciones']['cancelar_hover']};
+                }}
             """)
             self.btn_cancelar.clicked.connect(self.reject)
-            
-            self.btn_guardar = QPushButton("✏️ Actualizar")
-            self.btn_guardar.setStyleSheet("""
-                QPushButton {
-                    background-color: #4caf50;
+
+            self.btn_guardar = QPushButton("Actualizar")
+            self.btn_guardar.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {PALETA['acciones']['guardar']};
                     min-width: 100px;
-                }
-                QPushButton:hover {
-                    background-color: #388e3c;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {PALETA['acciones']['guardar_hover']};
+                }}
             """)
             self.btn_guardar.clicked.connect(self.guardar_categoria)
             for b in (self.btn_eliminar, self.btn_cancelar, self.btn_guardar):
@@ -233,26 +234,26 @@ class FormCategoria(QDialog):
             botones_layout.addStretch()
             
             self.btn_cancelar = QPushButton("Cancelar")
-            self.btn_cancelar.setStyleSheet("""
-                QPushButton {
-                    background-color: #757575;
+            self.btn_cancelar.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {PALETA['acciones']['cancelar']};
                     min-width: 80px;
-                }
-                QPushButton:hover {
-                    background-color: #616161;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {PALETA['acciones']['cancelar_hover']};
+                }}
             """)
             self.btn_cancelar.clicked.connect(self.reject)
-            
-            self.btn_guardar = QPushButton("💾 Guardar")
-            self.btn_guardar.setStyleSheet("""
-                QPushButton {
-                    background-color: #4caf50;
+
+            self.btn_guardar = QPushButton("Guardar")
+            self.btn_guardar.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {PALETA['acciones']['guardar']};
                     min-width: 100px;
-                }
-                QPushButton:hover {
-                    background-color: #388e3c;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {PALETA['acciones']['guardar_hover']};
+                }}
             """)
             self.btn_guardar.clicked.connect(self.guardar_categoria)
 
