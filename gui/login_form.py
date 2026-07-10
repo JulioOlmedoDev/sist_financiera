@@ -13,6 +13,7 @@ import pyotp
 from gui.two_factor_setup import TwoFactorSetupDialog
 from models import get_setting
 from utils.security import hash_password, verify_password
+from utils.estilos import PALETA
 
 PASSWORD_MAX_AGE_DAYS = 60
 LOCK_THRESHOLD = 5
@@ -96,44 +97,44 @@ class TokenDialog(QDialog):
         btn_cancel.setObjectName("brandGhost")
 
         # Estilos del modal, inputs y botones (paleta violeta)
-        self.setStyleSheet("""
-            QDialog {
+        self.setStyleSheet(f"""
+            QDialog {{
                 background-color: #ffffff;
                 border-radius: 10px;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 font-size: 15px;
-                color: #333333;
-            }
-            QLineEdit {
+                color: {PALETA['neutros']['texto']};
+            }}
+            QLineEdit {{
                 padding: 10px;
                 font-size: 18px;
                 letter-spacing: 3px;
                 border: 1px solid #d7c6ef;
                 border-radius: 8px;
                 background: #faf7ff;
-            }
-            QLineEdit:focus {
-                border: 1px solid #9c27b0;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {PALETA['identidad']['primario']};
                 background: #f7f2ff;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 min-width: 110px;
                 padding: 8px 14px;
                 border-radius: 8px;
                 font-weight: 700;
-            }
-            QPushButton:hover { opacity: .96; }
-            QPushButton:pressed { transform: translateY(1px); }
+            }}
+            QPushButton:hover {{ opacity: .96; }}
+            QPushButton:pressed {{ transform: translateY(1px); }}
 
             /* Colores corporativos */
-            QPushButton#brandPrimary {
-                background-color: #9c27b0; color: #ffffff;
-            }
-            QPushButton#brandGhost {
-                background-color: #efe6ff; color: #4a148c;
+            QPushButton#brandPrimary {{
+                background-color: {PALETA['identidad']['primario']}; color: {PALETA['neutros']['texto_blanco']};
+            }}
+            QPushButton#brandGhost {{
+                background-color: #efe6ff; color: {PALETA['identidad']['primario_oscuro']};
                 border: 1px solid #d9c6ef;
-            }
+            }}
         """)
 
     def get_code(self) -> str:
@@ -174,15 +175,15 @@ class LoginForm(QWidget):
             main_layout.addWidget(logo_label)
 
         titulo = QLabel("Acceso al Sistema"); titulo.setAlignment(Qt.AlignCenter)
-        titulo.setFont(QFont("Segoe UI", 18, QFont.Bold)); titulo.setStyleSheet("color: #6a1b9a;")
+        titulo.setFont(QFont("Segoe UI", 18, QFont.Bold)); titulo.setStyleSheet(f"color: {PALETA['identidad']['primario_pressed']};")
         main_layout.addWidget(titulo); main_layout.addLayout(form_layout); main_layout.addStretch()
         self.setLayout(main_layout)
 
-        self.setStyleSheet("""
-            QWidget { background-color: #fafafa; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; }
-            QLineEdit { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-            QPushButton { background-color: #9c27b0; color: white; font-weight: bold; border: none; border-radius: 4px; }
-            QPushButton:hover { background-color: #7b1fa2; }
+        self.setStyleSheet(f"""
+            QWidget {{ background-color: #fafafa; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; }}
+            QLineEdit {{ padding: 8px; border: 1px solid #ccc; border-radius: 4px; }}
+            QPushButton {{ background-color: {PALETA['identidad']['primario']}; color: {PALETA['neutros']['texto_blanco']}; font-weight: bold; border: none; border-radius: 4px; }}
+            QPushButton:hover {{ background-color: {PALETA['identidad']['primario_hover']}; }}
         """)
 
     def verificar_credenciales(self):
