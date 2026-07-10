@@ -33,6 +33,7 @@ from gui.lock_screen import LockScreenDialog
 from models import Personal
 from zoneinfo import ZoneInfo
 from utils.dialogos import confirmar
+from utils.estilos import PALETA
 
 
 class BotonNavegacion(QPushButton):
@@ -45,8 +46,8 @@ class BotonNavegacion(QPushButton):
         if icono:
             self.setIcon(QIcon(icono))
             self.setIconSize(QSize(24, 24))
-        self.setStyleSheet("""
-            QPushButton {
+        self.setStyleSheet(f"""
+            QPushButton {{
                 background-color: transparent;
                 border: none;
                 border-radius: 6px;
@@ -55,22 +56,22 @@ class BotonNavegacion(QPushButton):
                 font-weight: bold;
                 text-align: left;
                 padding: 10px 14px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: rgba(255, 255, 255, 0.10);
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: rgba(255, 255, 255, 0.18);
-            }
+            }}
             /* Estado activo persistente */
-            QPushButton[active="true"] {
+            QPushButton[active="true"] {{
                 background-color: rgba(255, 255, 255, 0.18);
                 border: 1px solid rgba(255, 255, 255, 0.25);
-                color: #ffffff;
-            }
-            QPushButton[active="true"]:hover {
+                color: {PALETA['neutros']['texto_blanco']};
+            }}
+            QPushButton[active="true"]:hover {{
                 background-color: rgba(255, 255, 255, 0.22);
-            }
+            }}
         """)
 
     def set_active(self, is_active: bool):
@@ -155,74 +156,74 @@ class VentanaPrincipal(QMainWindow):
 
     # ---------- Estilos ----------
     def aplicar_estilo(self):
-        base = """
-            QMainWindow { background-color: #f5f5f5; }
-            QLabel { color: #424242; font-size: 14px; }
-            QLabel#titulo { color: #7b1fa2; font-size: 24px; font-weight: bold; }
-            QLabel#subtitulo { color: #9c27b0; font-size: 18px; font-weight: bold; }
-            QLabel#bienvenida { color: #7b1fa2; font-size: 32px; font-weight: bold; }
+        base = f"""
+            QMainWindow {{ background-color: #f5f5f5; }}
+            QLabel {{ color: #424242; font-size: 14px; }}
+            QLabel#titulo {{ color: {PALETA['identidad']['primario_hover']}; font-size: 24px; font-weight: bold; }}
+            QLabel#subtitulo {{ color: {PALETA['identidad']['primario']}; font-size: 18px; font-weight: bold; }}
+            QLabel#bienvenida {{ color: {PALETA['identidad']['primario_hover']}; font-size: 32px; font-weight: bold; }}
 
-            QPushButton {
-                background-color: #9c27b0; color: white; border: none; border-radius: 4px;
+            QPushButton {{
+                background-color: {PALETA['identidad']['primario']}; color: {PALETA['neutros']['texto_blanco']}; border: none; border-radius: 4px;
                 padding: 8px 16px; font-weight: bold;
-            }
-            QPushButton:hover { background-color: #7b1fa2; }
-            QPushButton:pressed { background-color: #6a1b9a; }
+            }}
+            QPushButton:hover {{ background-color: {PALETA['identidad']['primario_hover']}; }}
+            QPushButton:pressed {{ background-color: {PALETA['identidad']['primario_pressed']}; }}
 
-            QFrame#sidebar { background-color: #4a148c; border-right: 1px solid #3e1178; }
-            QFrame#header { background-color: white; border-bottom: 1px solid #e0e0e0; }
-            QFrame#content { background-color: white; border-radius: 8px; border: 1px solid #e0e0e0; }
+            QFrame#sidebar {{ background-color: {PALETA['identidad']['primario_oscuro']}; border-right: 1px solid #3e1178; }}
+            QFrame#header {{ background-color: white; border-bottom: 1px solid #e0e0e0; }}
+            QFrame#content {{ background-color: white; border-radius: 8px; border: 1px solid #e0e0e0; }}
         """
 
         # Estilo del botón de perfil (QToolButton en forma de "pill") y del QMenu
-        perfil = """
+        perfil = f"""
             /* Pastilla de perfil (QToolButton) */
-            QToolButton {
+            QToolButton {{
                 padding: 8px 14px;
                 border: 1px solid #d9c6ef;
                 border-radius: 20px;      /* pill */
                 background: #ffffff;
-                color: #4a148c;
+                color: {PALETA['identidad']['primario_oscuro']};
                 font-weight: 700;
                 font-size: 15px;
-            }
-            QToolButton:hover { background: #f7f2ff; }
-            QToolButton:pressed { background: #efe6ff; }
+            }}
+            QToolButton:hover {{ background: #f7f2ff; }}
+            QToolButton:pressed {{ background: #efe6ff; }}
 
             /* Botón Bloquear (morado sólido, como antes) */
-            QPushButton#btnBloquear {
-                background-color: #9c27b0;
-                color: #ffffff;
+            QPushButton#btnBloquear {{
+                background-color: {PALETA['identidad']['primario']};
+                color: {PALETA['neutros']['texto_blanco']};
                 border: none;
                 border-radius: 6px;
                 font-weight: 700;
                 padding: 6px 12px;
-            }
-            QPushButton#btnBloquear:hover { background-color: #7b1fa2; }
-            QPushButton#btnBloquear:pressed { background-color: #6a1b9a; }
+            }}
+            QPushButton#btnBloquear:hover {{ background-color: {PALETA['identidad']['primario_hover']}; }}
+            QPushButton#btnBloquear:pressed {{ background-color: {PALETA['identidad']['primario_pressed']}; }}
 
             /* Menú PRO (más grande y pulido) */
-            QMenu {
+            QMenu {{
                 background: #ffffff;
                 border: 1px solid #e4e4e7;
                 border-radius: 12px;
                 padding: 10px;               /* más aire interno */
                 min-width: 260px;            /* ancho mínimo más cómodo */
-            }
-            QMenu::separator {
+            }}
+            QMenu::separator {{
                 height: 1px;
                 background: #eeeeee;
                 margin: 8px 10px;            /* separadores con más respiro */
-            }
-            
+            }}
+
             /* ÚNICO indicador del menú en la pastilla de perfil */
-            QToolButton::menu-indicator {
+            QToolButton::menu-indicator {{
                 subcontrol-origin: padding;
                 subcontrol-position: right center;   /* flecha a la derecha */
                 width: 12px;
                 height: 12px;
                 padding-left: 8px;                   /* respiro entre icono y flecha */
-            }            
+            }}
         """
         perfil += """
             /* Tarjeta superior del menú de perfil */
@@ -242,9 +243,9 @@ class VentanaPrincipal(QMainWindow):
                 color: #7c7c7c;
             }
         """
-        perfil += """
+        perfil += f"""
             /* Encabezado de grupo (CUENTA / SEGURIDAD) en formato chip */
-            #menuGroupHeader {
+            #menuGroupHeader {{
                 padding: 6px 10px;
                 margin: 4px 8px 6px 8px;
                 font-weight: 800;
@@ -252,12 +253,12 @@ class VentanaPrincipal(QMainWindow):
                 letter-spacing: 0.7px;
                 color: #6b21a8;                /* violeta más oscuro */
                 background: #faf5ff;           /* fondo muy suave */
-                border-left: 3px solid #9c27b0;/* acento a la izquierda */
+                border-left: 3px solid {PALETA['identidad']['primario']};/* acento a la izquierda */
                 border-radius: 6px;
-            }
+            }}
 
             /* Acciones con look de botón fantasma */
-            QMenu::item {
+            QMenu::item {{
                 padding: 10px 12px;
                 margin: 4px 6px;
                 border: 1px solid #ede7f6;     /* borde suave */
@@ -266,15 +267,15 @@ class VentanaPrincipal(QMainWindow):
                 font-size: 15px;
                 color: #424242;
                 background: #ffffff;           /* base blanco */
-            }
-            QMenu::item:selected {
+            }}
+            QMenu::item:selected {{
                 background: #f3e8ff;           /* hover violeta suave */
                 border-color: #d6c3ff;         /* borde un poco más marcado */
-                color: #4a148c;
-            }
-            QMenu::item:pressed {
+                color: {PALETA['identidad']['primario_oscuro']};
+            }}
+            QMenu::item:pressed {{
                 background: #efe6ff;
-            }
+            }}
         """
 
         self.setStyleSheet(base + perfil)
@@ -299,7 +300,7 @@ class VentanaPrincipal(QMainWindow):
 
         # Usuario
         self.user_label = QLabel(f"Bienvenido,\n{self.usuario.nombre}")
-        self.user_label.setStyleSheet("color: white; font-size: 16px; margin-top: 10px;")
+        self.user_label.setStyleSheet(f"color: {PALETA['neutros']['texto_blanco']}; font-size: 16px; margin-top: 10px;")
         self.user_label.setAlignment(Qt.AlignCenter)
         self.sidebar_layout.addWidget(self.user_label)
 
@@ -435,7 +436,7 @@ class VentanaPrincipal(QMainWindow):
 
         # Título módulo en sidebar
         titulo_modulo = QLabel(f"  Módulo: {modulo.capitalize()}")
-        titulo_modulo.setStyleSheet("color: white; font-size: 16px; font-weight: bold; margin: 5px 0;")
+        titulo_modulo.setStyleSheet(f"color: {PALETA['neutros']['texto_blanco']}; font-size: 16px; font-weight: bold; margin: 5px 0;")
         self.menu_layout.addWidget(titulo_modulo)
 
         # Título superior
@@ -568,17 +569,17 @@ class VentanaPrincipal(QMainWindow):
                 btn_abrir.setIcon(QIcon("static/icons/credit-card.png"))
                 btn_abrir.setIconSize(QSize(32, 32))
                 btn_abrir.setFixedSize(280, 60)
-                btn_abrir.setStyleSheet("""
-                    QPushButton {
-                        background-color: #9c27b0;
-                        color: white;
+                btn_abrir.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {PALETA['identidad']['primario']};
+                        color: {PALETA['neutros']['texto_blanco']};
                         font-size: 16px;
                         font-weight: bold;
                         border-radius: 6px;
                         padding: 8px 12px;
-                    }
-                    QPushButton:hover { background-color: #7b1fa2; }
-                    QPushButton:pressed { background-color: #6a1b9a; }
+                    }}
+                    QPushButton:hover {{ background-color: {PALETA['identidad']['primario_hover']}; }}
+                    QPushButton:pressed {{ background-color: {PALETA['identidad']['primario_pressed']}; }}
                 """)
                 btn_abrir.clicked.connect(self.abrir_form_cobros)
                 lay.addWidget(btn_abrir)
