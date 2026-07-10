@@ -11,6 +11,7 @@ from utils.guards import require_perm_or_close
 from utils.permisos import tiene_permiso_match
 from sqlalchemy.exc import IntegrityError
 from utils.dialogos import confirmar
+from utils.estilos import PALETA
 
 
 class FormListadoProductos(QWidget):
@@ -51,8 +52,22 @@ class FormListadoProductos(QWidget):
         
         # Botón para nueva categoría
         botones_superiores = QHBoxLayout()
-        btn_nueva_categoria = QPushButton("➕ Nueva Categoría")
+        btn_nueva_categoria = QPushButton("Nueva Categoría")
         btn_nueva_categoria.setObjectName("btn_nueva_categoria")
+        i = PALETA["identidad"]
+        btn_nueva_categoria.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {i['primario']};
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {i['primario_hover']};
+            }}
+        """)
         btn_nueva_categoria.clicked.connect(self.abrir_nueva_categoria)
         botones_superiores.addWidget(btn_nueva_categoria)
         botones_superiores.addStretch()
@@ -97,65 +112,6 @@ class FormListadoProductos(QWidget):
                 padding: 16px;
                 margin-bottom: 16px;
             }
-            QPushButton {
-                background-color: #9c27b0;
-                color: white;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-height: 30px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
-            }
-            QPushButton:pressed {
-                background-color: #6a1b9a;
-            }
-            QPushButton[objectName="btn_nueva_categoria"] {
-                background-color: #4caf50;
-                padding: 10px 20px;
-            }
-            QPushButton[objectName="btn_nueva_categoria"]:hover {
-                background-color: #388e3c;
-            }
-            QPushButton[objectName="btn_editar_cat"] {
-                background-color: #9c27b0;
-            }
-            QPushButton[objectName="btn_editar_cat"]:hover {
-                background-color: #7b1fa2;
-            }
-            QPushButton[objectName="btn_eliminar_cat"] {
-                background-color: #e53935;
-            }
-            QPushButton[objectName="btn_eliminar_cat"]:hover {
-                background-color: #c62828;
-            }
-            QPushButton[objectName="btn_nuevo_prod"] {
-                background-color: #4caf50;
-            }
-            QPushButton[objectName="btn_nuevo_prod"]:hover {
-                background-color: #388e3c;
-            }
-            QPushButton[objectName="btn_editar_prod"] {
-                background-color: #5c6bc0;
-                padding: 6px 12px;
-                min-width: 35px;
-                max-width: 35px;
-            }
-            QPushButton[objectName="btn_editar_prod"]:hover {
-                background-color: #3f51b5;
-            }
-            QPushButton[objectName="btn_eliminar_prod"] {
-                background-color: #ef5350;
-                padding: 6px 12px;
-                min-width: 35px;
-                max-width: 35px;
-            }
-            QPushButton[objectName="btn_eliminar_prod"]:hover {
-                background-color: #e53935;
-            }
         """)
         
         # Layout principal de la ventana
@@ -177,6 +133,8 @@ class FormListadoProductos(QWidget):
 
     def cargar_listado(self):
         """Carga el listado de categorías y productos"""
+        pal_i = PALETA["identidad"]
+        pal_a = PALETA["acciones"]
         # Limpiar layout existente (excepto título y botón superior)
         while self.layout_principal.count() > 2:
             child = self.layout_principal.takeAt(2)
@@ -342,14 +300,44 @@ class FormListadoProductos(QWidget):
                     fila_prod.addStretch()
                     
                     # Botones de acción para producto
-                    btn_editar_prod = QPushButton("✏️")
+                    btn_editar_prod = QPushButton("✎")
                     btn_editar_prod.setObjectName("btn_editar_prod")
                     btn_editar_prod.setToolTip("Editar producto")
+                    btn_editar_prod.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {pal_i['primario']};
+                            color: white;
+                            padding: 6px 12px;
+                            min-width: 35px;
+                            max-width: 35px;
+                            border: none;
+                            border-radius: 4px;
+                            font-weight: bold;
+                        }}
+                        QPushButton:hover {{
+                            background-color: {pal_i['primario_hover']};
+                        }}
+                    """)
                     btn_editar_prod.clicked.connect(lambda checked=False, p_id=prod.id: self.abrir_editar_producto(p_id))
-                    
-                    btn_eliminar_prod = QPushButton("🗑️")
+
+                    btn_eliminar_prod = QPushButton("✕")
                     btn_eliminar_prod.setObjectName("btn_eliminar_prod")
                     btn_eliminar_prod.setToolTip("Eliminar producto")
+                    btn_eliminar_prod.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {pal_a['eliminar']};
+                            color: white;
+                            padding: 6px 12px;
+                            min-width: 35px;
+                            max-width: 35px;
+                            border: none;
+                            border-radius: 4px;
+                            font-weight: bold;
+                        }}
+                        QPushButton:hover {{
+                            background-color: {pal_a['eliminar_hover']};
+                        }}
+                    """)
                     btn_eliminar_prod.clicked.connect(lambda checked=False, p_id=prod.id: self.eliminar_producto(p_id))
                     
                     fila_prod.addWidget(btn_editar_prod)
@@ -398,16 +386,55 @@ class FormListadoProductos(QWidget):
             botones_layout.setSpacing(12)
             botones_layout.setContentsMargins(0, 5, 0, 0)
             
-            btn_nuevo_prod = QPushButton("➕ Nuevo Producto")
+            btn_nuevo_prod = QPushButton("Nuevo Producto")
             btn_nuevo_prod.setObjectName("btn_nuevo_prod")
+            btn_nuevo_prod.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {pal_i['primario']};
+                    color: white;
+                    padding: 8px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {pal_i['primario_hover']};
+                }}
+            """)
             btn_nuevo_prod.clicked.connect(lambda checked=False, c_id=cat.id: self.abrir_nuevo_producto(c_id))
-            
-            btn_editar_cat = QPushButton("✏️ Editar Categoría")
+
+            btn_editar_cat = QPushButton("Editar Categoría")
             btn_editar_cat.setObjectName("btn_editar_cat")
+            btn_editar_cat.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {pal_i['primario']};
+                    color: white;
+                    padding: 8px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {pal_i['primario_hover']};
+                }}
+            """)
             btn_editar_cat.clicked.connect(lambda checked=False, c_id=cat.id: self.abrir_editar_categoria(c_id))
-            
-            btn_eliminar_cat = QPushButton("🗑️ Eliminar Categoría")
+
+            btn_eliminar_cat = QPushButton("Eliminar Categoría")
             btn_eliminar_cat.setObjectName("btn_eliminar_cat")
+            btn_eliminar_cat.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {pal_a['eliminar']};
+                    color: white;
+                    padding: 8px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {pal_a['eliminar_hover']};
+                }}
+            """)
             btn_eliminar_cat.clicked.connect(lambda checked=False, c_id=cat.id: self.eliminar_categoria(c_id))
             
             botones_layout.addWidget(btn_nuevo_prod)
