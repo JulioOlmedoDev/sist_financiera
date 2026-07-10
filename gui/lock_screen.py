@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Usuario
 from utils.security import hash_password, verify_password
+from utils.estilos import PALETA
 
 class LockScreenDialog(QDialog):
     """
@@ -19,7 +20,7 @@ class LockScreenDialog(QDialog):
 
         title = QLabel("🔒 Pantalla bloqueada")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size:18px; font-weight:bold; color:#6a1b9a;")
+        title.setStyleSheet(f"font-size:18px; font-weight:bold; color:{PALETA['identidad']['primario_pressed']};")
         lay.addWidget(title)
 
         info = QLabel(f"Usuario: <b>{usuario.nombre}</b>")
@@ -49,11 +50,11 @@ class LockScreenDialog(QDialog):
         lay.addLayout(btns)
 
         self.setMinimumWidth(420)
-        self.setStyleSheet("""
-            QDialog { background: #fafafa; }
-            QLineEdit { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-            QPushButton { background:#9c27b0; color:white; border:none; border-radius:4px; padding:8px 12px; }
-            QPushButton:hover { background:#7b1fa2; }
+        self.setStyleSheet(f"""
+            QDialog {{ background: #fafafa; }}
+            QLineEdit {{ padding: 8px; border: 1px solid #ccc; border-radius: 4px; }}
+            QPushButton {{ background:{PALETA['identidad']['primario']}; color:{PALETA['neutros']['texto_blanco']}; border:none; border-radius:4px; padding:8px 12px; }}
+            QPushButton:hover {{ background:{PALETA['identidad']['primario_hover']}; }}
         """)
 
         # Evitá cerrar con ESC o con la X (opcional):
