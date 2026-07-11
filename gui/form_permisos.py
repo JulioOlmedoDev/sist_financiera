@@ -9,6 +9,7 @@ from collections import defaultdict, OrderedDict
 from database import get_session
 from models import Usuario, Permiso, Rol
 from utils.permisos import es_admin, contar_admins_activos
+from utils.estilos import PALETA
 
 # ====== Mapa de módulos -> lista de acciones (códigos + texto) ======
 # Usamos exactamente tu taxonomía/códigos para que se vea 1:1 en UI.
@@ -121,7 +122,7 @@ class FormPermisos(QWidget):
         # Fila superior: Usuario + aplicar plantilla
         fila_top = QHBoxLayout()
         lbl_usuario = QLabel("Seleccionar Usuario *")
-        lbl_usuario.setStyleSheet("color: #7b1fa2; font-weight: bold;")
+        lbl_usuario.setStyleSheet(f"color: {PALETA['identidad']['primario_hover']}; font-weight: bold;")
         self.usuario_combo = QComboBox()
         self.usuario_combo.setMinimumHeight(30)
         self.usuario_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -169,6 +170,8 @@ class FormPermisos(QWidget):
         botones_layout.addStretch()
         self.btn_cancelar = QPushButton("Cancelar")
         self.btn_guardar = QPushButton("Guardar Permisos")
+        self.btn_cancelar.setObjectName("btnCancelar")
+        self.btn_guardar.setObjectName("btnGuardar")
         self.btn_guardar.clicked.connect(self.guardar_permisos)
         self.btn_cancelar.clicked.connect(self.close)
         botones_layout.addWidget(self.btn_cancelar)
@@ -185,38 +188,53 @@ class FormPermisos(QWidget):
         self.cargar_permisos_usuario()
 
     def estilo_general(self):
-        return """
-            QWidget {
+        i = PALETA["identidad"]
+        a = PALETA["acciones"]
+        n = PALETA["neutros"]
+        return f"""
+            QWidget {{
                 font-size: 14px;
                 background-color: #f7f7fb;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 font-weight: bold;
-            }
-            QComboBox {
+            }}
+            QComboBox {{
                 padding: 6px;
-                border: 1px solid #ccc;
+                border: 1px solid {n['borde']};
                 border-radius: 6px;
-                background-color: #fff;
-            }
-            QGroupBox {
+                background-color: {n['texto_blanco']};
+            }}
+            QGroupBox {{
                 font-weight: bold;
                 border: 1px solid #e0e0e0;
                 border-radius: 8px;
                 margin-top: 16px;
                 padding: 10px 12px;
-                background: #ffffff;
-            }
-            QPushButton {
-                background-color: #9c27b0;
+                background: {n['texto_blanco']};
+            }}
+            QPushButton {{
+                background-color: {i['primario']};
                 color: white;
                 padding: 10px 18px;
                 border-radius: 6px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {i['primario_hover']};
+            }}
+            QPushButton#btnCancelar {{
+                background-color: {a['cancelar']};
+            }}
+            QPushButton#btnCancelar:hover {{
+                background-color: {a['cancelar_hover']};
+            }}
+            QPushButton#btnGuardar {{
+                background-color: {a['guardar']};
+            }}
+            QPushButton#btnGuardar:hover {{
+                background-color: {a['guardar_hover']};
+            }}
         """
 
     # ----- Construcción visual por módulos -----
