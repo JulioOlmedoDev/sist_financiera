@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload
 from gui.form_venta import FormVenta
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
 from utils.permisos import tiene_permiso_match
+from utils.estilos import PALETA
 import os
 import platform
 import unicodedata
@@ -52,28 +53,28 @@ class FormVentas(QWidget):
         self._show_loading("Cargando ventas…")
         QTimer.singleShot(0, self._load_after_paint)
 
-        self.setStyleSheet("""
-            QLabel#titulo {
+        self.setStyleSheet(f"""
+            QLabel#titulo {{
                 font-size: 22px;
                 font-weight: bold;
                 color: #6a1b9a;
-            }
-            QTableWidget {
+            }}
+            QTableWidget {{
                 background-color: #ffffff;
                 border: 1px solid #dddddd;
                 border-radius: 6px;
                 font-size: 14px;
-            }
-            QPushButton {
-                background-color: #9c27b0;
-                color: white;
+            }}
+            QPushButton {{
+                background-color: {PALETA['identidad']['primario']};
+                color: {PALETA['neutros']['texto_blanco']};
                 padding: 4px 12px;
                 border: none;
                 border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {PALETA['identidad']['primario_hover']};
+            }}
         """)
 
     # ---------- util ----------
@@ -323,6 +324,12 @@ class FormVentas(QWidget):
         hbox = QHBoxLayout()
         btn_word = QPushButton("Word")
         btn_pdf = QPushButton("PDF")
+        btn_style = f"""
+            QPushButton {{ background-color: {PALETA['identidad']['primario']}; color: {PALETA['neutros']['texto_blanco']}; }}
+            QPushButton:hover {{ background-color: {PALETA['identidad']['primario_hover']}; }}
+        """
+        btn_word.setStyleSheet(btn_style)
+        btn_pdf.setStyleSheet(btn_style)
         hbox.addWidget(btn_word)
         hbox.addWidget(btn_pdf)
         vbox.addLayout(hbox)
