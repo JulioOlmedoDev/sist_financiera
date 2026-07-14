@@ -1,5 +1,8 @@
 from dateutil.relativedelta import relativedelta
 from docx import Document
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+from docx.shared import Cm
 from decimal import Decimal, ROUND_HALF_UP
 
 from models import Venta
@@ -96,11 +99,6 @@ def preparar_datos_contrato(venta: Venta):
         intervalo = relativedelta(months=1)
         texto_periodicidad = "mensuales"
 
-    vencs = [
-        f"La cuota {i+1} vence el: {fecha_larga(fecha_inicio_pago + intervalo * i)}"
-        for i in range(venta.num_cuotas)
-    ]
-
     return {
         "cliente_nombre": f"{cliente.apellidos} {cliente.nombres}",
         "cliente_domicilio": cliente.domicilio_personal or "________",
@@ -113,7 +111,6 @@ def preparar_datos_contrato(venta: Venta):
         "tem": f"{venta.tem:.2f}",
         "tna": f"{venta.tna:.2f}",
         "tea": f"{venta.tea:.3f}",
-        "vencimientos": "\n".join(vencs),
         "garante_nombre": f"{garante.apellidos} {garante.nombres}" if garante else "________",
         "garante_domicilio": garante.domicilio_personal if garante else "________",
         "cliente_tipo_doc": cliente.tipo_documento or "",
@@ -136,11 +133,76 @@ def reemplazar_tags_doc(doc: Document, datos: dict):
             if tag in p.text:
                 p.text = p.text.replace(tag, str(val))
 
+def _agregar_bordes_tabla(tabla) -> None:
+    tblPr = tabla._tbl.tblPr
+    tblBorders = OxmlElement('w:tblBorders')
+    for borde in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        el = OxmlElement(f'w:{borde}')
+        el.set(qn('w:val'), 'single')
+        el.set(qn('w:sz'), '4')
+        el.set(qn('w:space'), '0')
+        el.set(qn('w:color'), '000000')
+        tblBorders.append(el)
+    tblPr.append(tblBorders)
+
+def insertar_tabla_vencimientos(doc: Document, venta: Venta) -> None:
+    parrafo_placeholder = None
+    for p in doc.paragraphs:
+        if p.text.strip() == "{{vencimientos}}":
+            parrafo_placeholder = p
+            break
+    if parrafo_placeholder is None:
+        raise ValueError("No se encontró el placeholder {{vencimientos}} en la plantilla.")
+
+    cuotas_ordenadas = sorted(venta.cuotas, key=lambda c: c.numero)
+    if not cuotas_ordenadas:
+        raise ValueError("La venta no tiene cuotas cargadas; no se puede generar el cronograma de vencimientos.")
+
+    parrafo_placeholder.text = ""
+
+    tabla = doc.add_table(rows=1, cols=3)
+    try:
+        tabla.style = 'Table Grid'
+    except KeyError:
+        _agregar_bordes_tabla(tabla)
+
+    encabezados = ["N° Cuota", "Vencimiento", "Importe"]
+    for idx, texto in enumerate(encabezados):
+        celda = tabla.rows[0].cells[idx]
+        celda.text = texto
+        for run in celda.paragraphs[0].runs:
+            run.bold = True
+
+    for cuota in cuotas_ordenadas:
+        fila = tabla.add_row()
+        fila.cells[0].text = str(cuota.numero)
+        fila.cells[1].text = cuota.fecha_vencimiento.strftime("%d/%m/%Y")
+        fila.cells[2].text = monto_formateado(cuota.monto_original)
+
+    anchos = (Cm(2.5), Cm(3.5), Cm(3.5))
+    for fila in tabla.rows:
+        for idx, ancho in enumerate(anchos):
+            fila.cells[idx].width = ancho
+
+    header_trPr = tabla.rows[0]._tr.get_or_add_trPr()
+    tblHeader = OxmlElement('w:tblHeader')
+    tblHeader.set(qn('w:val'), 'true')
+    header_trPr.append(tblHeader)
+
+    for fila in tabla.rows:
+        trPr = fila._tr.get_or_add_trPr()
+        cantSplit = OxmlElement('w:cantSplit')
+        cantSplit.set(qn('w:val'), 'true')
+        trPr.append(cantSplit)
+
+    parrafo_placeholder._p.addnext(tabla._tbl)
+
 def generar_contrato_word(venta: Venta, plantilla_path: str) -> str:
     salida_path = tempfile.NamedTemporaryFile(delete=False, suffix=".docx").name
     datos = preparar_datos_contrato(venta)
     doc = Document(plantilla_path)
     reemplazar_tags_doc(doc, datos)
+    insertar_tabla_vencimientos(doc, venta)
     doc.save(salida_path)
     return salida_path
 

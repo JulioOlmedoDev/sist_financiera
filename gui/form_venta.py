@@ -18,6 +18,7 @@ from utils.pdf_utils import generar_docs_word, generar_docs_pdf
 from utils.formato import formato_documento
 from sqlalchemy import desc
 from utils.estilos import PALETA
+from utils.archivos import abrir_archivo
 
 
 def _display_persona(obj) -> str:
@@ -832,10 +833,6 @@ class FormVenta(QWidget):
                 btn_cancel.rejected.connect(dlg.reject)
                 layout.addWidget(btn_cancel)
 
-                def open_file(path):
-                    if os.name == 'nt': os.startfile(path)
-                    else: os.system(f"xdg-open '{path}'")
-
                 def on_word():
                     try:
                         path_c, path_p = generar_docs_word(venta)
@@ -843,7 +840,7 @@ class FormVenta(QWidget):
                         QMessageBox.critical(dlg, "Error al generar Word", str(e))
                         return
                     for p in (path_c, path_p):
-                        if os.path.exists(p): open_file(p)
+                        if os.path.exists(p): abrir_archivo(p)
                     dlg.accept()
 
                 def on_pdf():
@@ -853,7 +850,7 @@ class FormVenta(QWidget):
                         QMessageBox.critical(dlg, "Error al generar PDF", str(e))
                         return
                     for p in (pdf_c, pdf_p):
-                        if os.path.exists(p): open_file(p)
+                        if os.path.exists(p): abrir_archivo(p)
                     dlg.accept()
 
                 btn_word.clicked.connect(on_word)

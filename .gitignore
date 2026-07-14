@@ -46,3 +46,5 @@ dist/
 # Archivos ejecutables
 *.exe
 venv/ 
+plantillas/*_backup.docx
+plantillas/.~lock*

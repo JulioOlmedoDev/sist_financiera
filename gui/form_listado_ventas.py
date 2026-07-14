@@ -13,8 +13,7 @@ from gui.form_venta import FormVenta
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
 from utils.permisos import tiene_permiso_match
 from utils.estilos import PALETA
-import os
-import platform
+from utils.archivos import abrir_archivo
 import unicodedata
 from sqlalchemy import desc
 from utils.dialogos import confirmar
@@ -80,20 +79,7 @@ class FormVentas(QWidget):
     # ---------- util ----------
 
     def _open_file(self, path: str):
-        """Abrir archivo con la app por defecto en Windows/macOS/Linux."""
-        try:
-            if not os.path.exists(path):
-                return False
-            system = platform.system().lower()
-            if "windows" in system:
-                os.startfile(path)  # type: ignore[attr-defined]
-            elif "darwin" in system:  # macOS
-                os.system(f"open '{path}'")
-            else:  # Linux
-                os.system(f"xdg-open '{path}'")
-            return True
-        except Exception:
-            return False
+        return abrir_archivo(path)
 
     # ---------- datos ----------
 
