@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, Text, ForeignKey, Enum, Boolean, Float, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Date, DateTime, Text, ForeignKey, Enum, Boolean, Float, Numeric, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -149,14 +149,14 @@ class Venta(Base):
     cobrador_id = Column(Integer, ForeignKey('personal.id'))
     fecha = Column(Date)
     fecha_inicio_pago = Column(Date)
-    monto = Column(Float)
+    monto = Column(Numeric(14, 2))
     num_cuotas = Column(Integer)
-    valor_cuota = Column(Float)
-    ptf = Column(Float)
-    interes = Column(Float)
-    tem = Column(Float)
-    tna = Column(Float)
-    tea = Column(Float)
+    valor_cuota = Column(Numeric(14, 2))
+    ptf = Column(Numeric(14, 2))
+    interes = Column(Numeric(9, 4))
+    tem = Column(Numeric(9, 4))
+    tna = Column(Numeric(9, 4))
+    tea = Column(Numeric(9, 4))
     descripcion = Column(Text)
     domicilio_cobro_preferido = Column(String(20))
     anulada = Column(Boolean, default=False)
@@ -185,11 +185,11 @@ class Cuota(Base):
     venta_id = Column(Integer, ForeignKey('ventas.id'))
     numero = Column(Integer)
     fecha_vencimiento = Column(Date)
-    monto_original = Column(Float)
-    monto_pagado = Column(Float, default=0.0)
+    monto_original = Column(Numeric(14, 2))
+    monto_pagado = Column(Numeric(14, 2), default=0.0)
     pagada = Column(Boolean, default=False)
     vencida = Column(Boolean, default=False)
-    interes_mora = Column(Float, default=0.0)
+    interes_mora = Column(Numeric(14, 2), default=0.0)
     refinanciada = Column(Boolean, default=False)
     
     fecha_pago = Column(Date, nullable=True)  # ✅ NUEVO
@@ -203,7 +203,7 @@ class Cobro(Base):
     id = Column(Integer, primary_key=True)
     venta_id = Column(Integer, ForeignKey('ventas.id'))
     fecha = Column(Date)
-    monto = Column(Float)
+    monto = Column(Numeric(14, 2))
     tipo = Column(String(20))
     observaciones = Column(Text)
     cuota_id = Column(Integer, ForeignKey('cuotas.id'), nullable=True)
@@ -227,9 +227,9 @@ class Tasa(Base):
     __tablename__ = "tasas"
     id  = Column(Integer, primary_key=True)
     plan = Column(String(20), unique=True, nullable=False)  # "mensual", "semanal", "diaria"
-    tem  = Column(Float, nullable=False)
-    tna  = Column(Float, nullable=False)
-    tea  = Column(Float, nullable=False)
+    tem  = Column(Numeric(9, 4), nullable=False)
+    tna  = Column(Numeric(9, 4), nullable=False)
+    tea  = Column(Numeric(9, 4), nullable=False)
 
 # --- Ajustes del sistema (clave-valor) ---
 class SystemSetting(Base):

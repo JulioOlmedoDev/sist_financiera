@@ -48,3 +48,4 @@ dist/
 venv/ 
 plantillas/*_backup.docx
 plantillas/.~lock*
+models.py.backup_pre_numeric
