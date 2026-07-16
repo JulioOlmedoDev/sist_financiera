@@ -6,12 +6,13 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QCursor
 from PySide6.QtCore import Signal, QDate, QTimer, Qt, QEvent
 from database import get_session
-from models import Cliente, Garante, Producto, Personal, Venta, Cuota, Tasa, Cobro
+from models import Cliente, Garante, Producto, Personal, Venta, Cuota, Cobro
 from sqlalchemy.orm import joinedload
 from gui.form_cliente import FormCliente
 from gui.form_garante import FormGarante
 from datetime import date
 from dateutil.relativedelta import relativedelta
+from utils.finanzas import tasa_efectiva_por_plan, calcular_cuota_frances
 import os
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
@@ -227,7 +228,7 @@ class FormVenta(QWidget):
 
         lbl = QLabel("T.N.A. (% anual, incluye IVA):"); lbl.setStyleSheet(label_style)
         self.tna_input = QDoubleSpinBox(self); self.tna_input.setDecimals(3)
-        self.tna_input.setRange(0, 300); self.tna_input.setSuffix(" %")
+        self.tna_input.setRange(0, 1200); self.tna_input.setSuffix(" %")
         self.tna_input.installEventFilter(self)
         self.tna_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.tna_input.valueChanged.connect(self._tasas_changed)
@@ -235,7 +236,7 @@ class FormVenta(QWidget):
 
         lbl = QLabel("T.E.A. (% anual, incluye IVA):"); lbl.setStyleSheet(label_style)
         self.tea_input = QDoubleSpinBox(self); self.tea_input.setDecimals(3)
-        self.tea_input.setRange(0, 300); self.tea_input.setSuffix(" %")
+        self.tea_input.setRange(0, 5000); self.tea_input.setSuffix(" %")
         self.tea_input.installEventFilter(self)
         self.tea_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.tea_input.valueChanged.connect(self._tasas_changed)
@@ -254,6 +255,21 @@ class FormVenta(QWidget):
         self.btn_calcular.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_calcular.clicked.connect(self.calcular_ptf)
         self.form.addRow("", self.btn_calcular)
+
+        # --- Calcular Cuota Sugerida (sistema frances) ---
+        self.btn_cuota_sugerida = QPushButton("Calcular Cuota Sugerida (sist. francés)")
+        self.btn_cuota_sugerida.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
+        self.btn_cuota_sugerida.setToolTip(
+            "Calcula el valor de cuota exacto segun el sistema frances, "
+            "a partir del monto, la TEM y la cantidad de cuotas. "
+            "El resultado queda editable por si necesitas ajustarlo."
+        )
+        self.btn_cuota_sugerida.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.btn_cuota_sugerida.clicked.connect(self.calcular_cuota_sugerida)
+        self.form.addRow("", self.btn_cuota_sugerida)
 
         # --- Salidas ---
         for text, attr in [("PTF:", 'ptf_output'), ("Interés (%):", 'interes_output')]:
@@ -322,6 +338,8 @@ class FormVenta(QWidget):
         self.cargar_clientes()
         self.cargar_garantes()
         self.cargar_productos()
+        self.producto_combo.currentIndexChanged.connect(self._on_producto_changed)
+        self._on_producto_changed(self.producto_combo.currentIndex())
         self.cargar_personal()
 
         if venta_id:
@@ -429,11 +447,22 @@ class FormVenta(QWidget):
             self.tem_input.blockSignals(False); self.tna_input.blockSignals(False)
 
     def _on_plan_changed(self, plan: str):
-        with get_session() as _s:
-            tasa = _s.query(Tasa).filter_by(plan=plan).first()
-            tem_val, tna_val, tea_val = (tasa.tem, tasa.tna, tasa.tea) if tasa else (0.0, 0.0, 0.0)
-        for spin, val in ((self.tem_input, tem_val), (self.tna_input, tna_val), (self.tea_input, tea_val)):
-            spin.blockSignals(True); spin.setValue(val); spin.blockSignals(False)
+        # El plan de pago ya no trae tasas propias: TEM/TNA/TEA vienen
+        # del producto elegido (ver _on_producto_changed). El plan solo
+        # define la frecuencia de cobro y la tasa efectiva por periodo
+        # al calcular la cuota sugerida (ver calcular_cuota_sugerida).
+        pass
+
+    def _on_producto_changed(self, index=None):
+        """Al elegir un producto, precarga su TEM base en el campo TEM.
+        Esto dispara _tasas_changed, que deriva TNA y TEA automaticamente."""
+        producto_id = self.producto_combo.currentData()
+        if producto_id is None:
+            return
+        with get_session() as session:
+            producto = session.get(Producto, producto_id)
+            tem_base = float(producto.tem_base) if producto and producto.tem_base is not None else 0.0
+        self.tem_input.setValue(round(tem_base * 100, 3))
 
     # --- Abrir formularios ---
     def abrir_form_cliente(self):
@@ -651,6 +680,27 @@ class FormVenta(QWidget):
         interes = ((ptf - monto) / monto * 100) if monto > 0 else 0
         self.interes_output.setText(f"{interes:.2f}")
         self._ptf_calculado = True
+
+    def calcular_cuota_sugerida(self):
+        """Calcula el valor de cuota exacto (sistema frances) a partir
+        de monto + TEM + cantidad de cuotas, respetando el plan de pago
+        (mensual/semanal/diaria) para derivar la tasa efectiva del periodo.
+        El resultado se carga en Valor de Cuota, editable despues."""
+        if self.monto_input.value() <= 0:
+            QMessageBox.warning(self, "Dato requerido", "El monto debe ser mayor que 0."); return
+        if self.cuotas_input.value() <= 0:
+            QMessageBox.warning(self, "Dato requerido", "La cantidad de cuotas debe ser mayor que 0."); return
+
+        tem = self.tem_input.value() / 100
+        plan = self.plan_pago_combo.currentText()
+        try:
+            tasa_periodo = tasa_efectiva_por_plan(tem, plan)
+            cuota = calcular_cuota_frances(self.monto_input.value(), tasa_periodo, self.cuotas_input.value())
+        except ValueError as e:
+            QMessageBox.warning(self, "Error de calculo", str(e)); return
+
+        self.valor_cuota_input.setValue(round(cuota, 2))
+        self.calcular_ptf()
 
     # --- Guardar ---
     def guardar_venta(self):
