@@ -370,6 +370,27 @@ class FormVenta(QWidget):
         if hasattr(self, "ptf_output"): self.ptf_output.clear()
         if hasattr(self, "interes_output"): self.interes_output.clear()
 
+    def _calcular_desvio_cuota(self):
+        """Compara la cuota cargada contra la cuota teorica (sistema frances)
+        segun TEM + plan + cuotas. Devuelve (cuota_teorica, desvio_pct) o
+        (None, None) si no se puede calcular (datos incompletos)."""
+        monto = self.monto_input.value()
+        n_cuotas = self.cuotas_input.value()
+        cuota_cargada = self.valor_cuota_input.value()
+        if monto <= 0 or n_cuotas <= 0 or cuota_cargada <= 0:
+            return None, None
+        try:
+            tem = self.tem_input.value() / 100
+            plan = self.plan_pago_combo.currentText()
+            tasa_periodo = tasa_efectiva_por_plan(tem, plan)
+            cuota_teorica = calcular_cuota_frances(monto, tasa_periodo, n_cuotas)
+        except (ValueError, ZeroDivisionError):
+            return None, None
+        if cuota_teorica == 0:
+            return None, None
+        desvio_pct = abs(cuota_cargada - cuota_teorica) / cuota_teorica * 100
+        return cuota_teorica, desvio_pct
+
     def _mostrar_confirmacion_guardado(self, texto_cliente, texto_garante):
         items = [
             ("Cliente", texto_cliente),
@@ -388,6 +409,15 @@ class FormVenta(QWidget):
             ("Primer pago", self.fecha_inicio_input.date().toString("dd/MM/yyyy")),
             ("Domicilio", self.domicilio_combo.currentText()),
         ]
+
+        cuota_teorica, desvio_pct = self._calcular_desvio_cuota()
+        if desvio_pct is not None and desvio_pct > 1.0:
+            items.append((
+                "⚠ Desvío de tasa",
+                f"Cuota cargada difiere {desvio_pct:.2f}% de la teórica "
+                f"(${cuota_teorica:.2f} según TEM {self.tem_input.value():.3f}%)"
+            ))
+
         dlg = ConfirmarVentaDialog(self, items)
         return dlg.exec() == QDialog.Accepted
 
