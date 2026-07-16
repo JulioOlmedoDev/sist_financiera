@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, # Cambiado a QDialog
-    QComboBox, QMessageBox, QHBoxLayout, QFrame
+    QComboBox, QMessageBox, QHBoxLayout, QFrame, QDoubleSpinBox
 )
 from PySide6.QtCore import Qt
 from database import get_session
@@ -152,7 +152,29 @@ class FormProducto(QDialog):  # ...
         self.categoria_combo = QComboBox()
         self.cargar_categorias()
         card_layout.addWidget(self.categoria_combo)
-        
+
+        # Campo TEM base
+        tem_label = QLabel("T.E.M. Base (%, sin IVA)")
+        tem_label.setStyleSheet("""
+            QLabel {
+                font-size: 15px;
+                font-weight: bold;
+                color: #7b1fa2;
+                margin-top: 10px;
+            }
+        """)
+        card_layout.addWidget(tem_label)
+
+        self.tem_base_input = QDoubleSpinBox()
+        self.tem_base_input.setDecimals(4)
+        self.tem_base_input.setRange(0, 100)
+        self.tem_base_input.setSuffix(" %")
+        self.tem_base_input.setToolTip(
+            "Tasa efectiva mensual real del producto. "
+            "El sistema deriva TNA, TEA y la tasa de planes semanal/diario a partir de este valor."
+        )
+        card_layout.addWidget(self.tem_base_input)
+
         # Texto de ayuda
         ayuda_label = QLabel("* Campos obligatorios")
         ayuda_label.setStyleSheet("""
@@ -310,6 +332,8 @@ class FormProducto(QDialog):  # ...
                     index = self.categoria_combo.findData(producto.categoria_id)
                     if index >= 0:
                         self.categoria_combo.setCurrentIndex(index)
+                    if producto.tem_base is not None:
+                        self.tem_base_input.setValue(float(producto.tem_base) * 100)
                 else:
                     QMessageBox.warning(self, "Error", "Producto no encontrado")
                     self.reject()
@@ -368,17 +392,19 @@ class FormProducto(QDialog):  # ...
 
         try:
             with get_session() as session:
+                tem_base = self.tem_base_input.value() / 100
                 if self.editando:
                     producto = session.get(Producto, self.producto_id)
                     if producto:
                         producto.nombre = nombre
                         producto.categoria_id = categoria_id
+                        producto.tem_base = tem_base
                         mensaje_exito = "Producto actualizado correctamente"
                     else:
                         QMessageBox.warning(self, "Error", "Producto no encontrado")
                         return
                 else:
-                    producto = Producto(nombre=nombre, categoria_id=categoria_id)
+                    producto = Producto(nombre=nombre, categoria_id=categoria_id, tem_base=tem_base)
                     session.add(producto)
                     mensaje_exito = "Producto guardado correctamente"
                 session.commit()

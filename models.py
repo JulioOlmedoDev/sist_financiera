@@ -114,6 +114,7 @@ class Producto(Base):
     nombre = Column(String(100), nullable=False)
     categoria_id = Column(Integer, ForeignKey('categorias.id'))
     categoria = relationship("Categoria")
+    tem_base = Column(Numeric(9, 4), nullable=True)  # TEM real del producto (base para calculos)
 
 class Personal(Base):
     __tablename__ = 'personal'
@@ -222,14 +223,6 @@ class Cobro(Base):
     cuota = relationship("Cuota", backref="cobros_aplicados", lazy="joined")
     registrado_por = relationship("Usuario", foreign_keys=[registrado_por_id])
 
-
-class Tasa(Base):
-    __tablename__ = "tasas"
-    id  = Column(Integer, primary_key=True)
-    plan = Column(String(20), unique=True, nullable=False)  # "mensual", "semanal", "diaria"
-    tem  = Column(Numeric(9, 4), nullable=False)
-    tna  = Column(Numeric(9, 4), nullable=False)
-    tea  = Column(Numeric(9, 4), nullable=False)
 
 # --- Ajustes del sistema (clave-valor) ---
 class SystemSetting(Base):
