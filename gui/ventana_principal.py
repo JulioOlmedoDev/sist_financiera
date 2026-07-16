@@ -22,7 +22,6 @@ from gui.form_gestion_clientes import FormGestionClientes
 from gui.form_gestion_garantes import FormGestionGarantes
 from gui.form_listado_ventas import FormVentas
 from gui.form_cobro import FormCobro
-from gui.dialog_tasas import DialogTasas
 from gui.form_listado_productos import FormListadoProductos
 from gui.form_listado_personal import FormListadoPersonal
 from gui.form_listado_usuarios import FormListadoUsuarios
@@ -398,13 +397,6 @@ class VentanaPrincipal(QMainWindow):
             btn_personal = BotonNavegacion("  Personal", "static/icons/users.png")
             btn_personal.clicked.connect(self._on_click(self._set_active_menu_btn, btn_personal, lambda: self.mostrar_submenu("personal")))
             self.menu_layout.addWidget(btn_personal)
-
-        # Tasas (no cambia al submenú)
-        if tiene_permiso_match(self.usuario, "configurar_tasas", "0400"):
-            btn_tasas = BotonNavegacion("  Configurar Tasas", "static/icons/percent.png")
-            btn_tasas.clicked.connect(self._on_click(self._set_active_menu_btn, btn_tasas, self.abrir_dialog_tasas))
-            self.menu_layout.addWidget(btn_tasas)
-
 
         # Cobros
         if tiene_permiso_match(self.usuario, "cobros", "0500", "gestion cobros"):
@@ -839,11 +831,6 @@ class VentanaPrincipal(QMainWindow):
         from PySide6.QtWidgets import QApplication
         if confirmar(self, "Cerrar sesión", "¿Estás seguro de que querés cerrar sesión?"):
             QApplication.quit()
-
-    def abrir_dialog_tasas(self):
-        dlg = DialogTasas()
-        if dlg.exec() == QDialog.Accepted:
-            QMessageBox.information(self, "Tasas", "Tasas actualizadas correctamente.")
 
     def abrir_cambiar_contrasena(self):
         dlg = ChangePasswordDialog(self, self.usuario)

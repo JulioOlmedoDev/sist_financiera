@@ -62,8 +62,7 @@ PERMISOS = [
     "0340 (ver/editar) listado de usuarios",
     "0350 Recuperar acceso (blanqueo contraseña)",
     "0360 (otorgar) permisos",
-    # Tasas / Cobros
-    "0400 Configurar tasas",
+    # Cobros
     "0500 Gestión de cobros",
 ]
 
