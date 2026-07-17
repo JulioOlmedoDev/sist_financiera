@@ -8,6 +8,7 @@ from models import Usuario, Personal, Rol
 from utils.formato import formato_documento
 from utils.security import hash_password
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 class FormUsuario(QWidget):
     usuario_guardado = Signal()
@@ -18,21 +19,10 @@ class FormUsuario(QWidget):
 
         self.usuario = usuario
         # --- GUARDIA DE ACCESO ---
-        if self.usuario is None:
-            QMessageBox.warning(self, "Acceso denegado", "No hay usuario autenticado.")
-            self.close()
-            return
-
-        rol = getattr(self.usuario, "rol", None)
-        nombre_rol = getattr(rol, "nombre", "").lower() if rol else ""
-
-        # Solo dueño / admin / gerente pueden gestionar usuarios
-        permisos_autorizados = ["owner", "administrador", "gerente"]
-
-        if nombre_rol not in permisos_autorizados:
-            QMessageBox.warning(self, "Acceso denegado",
-                                "No tenés permisos para acceder a este módulo.")
-            self.close()
+        if not require_perm_or_close(
+            self, self.usuario, "0330", "0340", "usuario",
+            msg="No tenés permisos para acceder a este módulo."
+        ):
             return
 
         self.setWindowTitle("Gestión de Usuario")

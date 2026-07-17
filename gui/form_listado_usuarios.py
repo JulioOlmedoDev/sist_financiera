@@ -8,15 +8,17 @@ from models import Usuario, Personal, Rol
 from gui.form_usuario import FormUsuario
 from utils.dialogos import confirmar
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 class FormListadoUsuarios(QWidget):
     def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
         self.usuario = usuario
         # --- GUARDIA DE ACCESO ---
-        if self.usuario is None:
-            QMessageBox.warning(self, "Acceso denegado", "No hay usuario autenticado.")
-            self.close()
+        if not require_perm_or_close(
+            self, self.usuario, "0340", "listado de usuarios",
+            msg="No tenés permisos para acceder a la gestión de usuarios."
+        ):
             return
 
         rol = getattr(self.usuario, "rol", None)

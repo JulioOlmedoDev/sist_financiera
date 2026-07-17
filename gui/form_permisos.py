@@ -9,6 +9,7 @@ from collections import defaultdict, OrderedDict
 from database import get_session
 from models import Usuario, Permiso, Rol
 from utils.permisos import es_admin, contar_admins_activos
+from utils.guards import require_perm_or_close
 from utils.estilos import PALETA
 
 # ====== Mapa de módulos -> lista de acciones (códigos + texto) ======
@@ -87,19 +88,10 @@ class FormPermisos(QWidget):
         super().__init__()
 
         # ------------- GUARDA INTERNA DE ACCESO -------------
-        from utils.permisos import es_admin, tiene_permiso
-        if usuario is None:
-            QMessageBox.critical(self, "Acceso denegado", "Usuario no autenticado.")
-            self.close()
-            return
-
-        # Sólo admins o quien tenga permiso explícito
-        if not (es_admin(usuario) or tiene_permiso(usuario, "0360 (otorgar) permisos")):
-            QMessageBox.critical(
-                self, "Acceso denegado",
-                "No tenés permisos para acceder a esta pantalla."
-            )
-            self.close()
+        if not require_perm_or_close(
+            self, usuario, "0360", "otorgar", "permisos",
+            msg="No tenés permisos para acceder a esta pantalla."
+        ):
             return
         # -----------------------------------------------------
 

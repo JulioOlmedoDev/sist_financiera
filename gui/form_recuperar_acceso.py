@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt
 from database import get_session
 from models import Usuario, Personal
 from utils.permisos import tiene_permiso, es_admin
+from utils.guards import require_perm_or_close
 from datetime import datetime
 from utils.security import hash_password
 from utils.dialogos import confirmar
@@ -17,17 +18,10 @@ class FormRecuperarAcceso(QWidget):
         super().__init__()
 
         # ------------------ GUARDA INTERNA ------------------
-        if usuario is None:
-            QMessageBox.critical(self, "Acceso denegado", "Usuario no autenticado.")
-            self.close()
-            return
-
-        if not (es_admin(usuario) or tiene_permiso(usuario, "0350 Recuperar acceso (blanqueo contraseña)")):
-            QMessageBox.critical(
-                self, "Acceso denegado",
-                "No tenés permisos para recuperar acceso de usuarios."
-            )
-            self.close()
+        if not require_perm_or_close(
+            self, usuario, "0350", "recuperar acceso",
+            msg="No tenés permisos para recuperar acceso de usuarios."
+        ):
             return
         # -----------------------------------------------------
 
