@@ -8,6 +8,7 @@ from PySide6.QtGui import QIcon, QDesktopServices
 from database import get_session
 from models import Venta, Cliente, Producto, Categoria, Personal, Cobro
 from utils.formato import formato_documento
+from utils.archivos import abrir_archivo
 from sqlalchemy.orm import joinedload
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -617,11 +618,7 @@ class FormConsultas(QWidget):
 
             c.save()
 
-            try:
-                import os
-                os.startfile(path)
-            except Exception:
-                pass
+            abrir_archivo(path)
             return
 
         # --------- EXPORTAR VENTAS (lo de siempre) ---------
@@ -769,11 +766,7 @@ class FormConsultas(QWidget):
         c.drawString(col_right[5] - c.stringWidth(ptf_txt, "Helvetica-Bold", 8), y, ptf_txt)
 
         c.save()
-        try:
-            import os
-            os.startfile(path)
-        except Exception:
-            pass
+        abrir_archivo(path)
 
 
     # ---------------------------
@@ -922,14 +915,8 @@ class FormConsultas(QWidget):
                 QMessageBox.critical(self, "Error al exportar", f"No se pudo guardar el Excel:\n{e}")
                 return
 
-            try:
-                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-            except Exception:
-                try:
-                    import os
-                    os.startfile(path)
-                except Exception:
-                    QMessageBox.information(self, "Exportar a Excel", f"Archivo guardado en:\n{path}")
+            if not abrir_archivo(path):
+                QMessageBox.information(self, "Exportar a Excel", f"Archivo guardado en:\n{path}")
             return
 
 
@@ -1081,11 +1068,5 @@ class FormConsultas(QWidget):
             return
 
         # Abrir el archivo resultante
-        try:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-        except Exception:
-            try:
-                import os
-                os.startfile(path)
-            except Exception:
-                QMessageBox.information(self, "Exportar a Excel", f"Archivo guardado en:\n{path}")
+        if not abrir_archivo(path):
+            QMessageBox.information(self, "Exportar a Excel", f"Archivo guardado en:\n{path}")
