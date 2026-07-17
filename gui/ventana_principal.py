@@ -404,6 +404,11 @@ class VentanaPrincipal(QMainWindow):
             btn_cobros.clicked.connect(self._on_click(self._set_active_menu_btn, btn_cobros, lambda: self.mostrar_submenu("cobros")))
             self.menu_layout.addWidget(btn_cobros)
 
+        # Ayuda (disponible para cualquier usuario logueado)
+        btn_ayuda = BotonNavegacion("  Ayuda", "static/icons/help.png")
+        btn_ayuda.clicked.connect(self._on_click(self._set_active_menu_btn, btn_ayuda, self.abrir_guia_ventas))
+        self.menu_layout.addWidget(btn_ayuda)
+
         self.menu_actual = "principal"
         # Reset subactivo al volver al menú principal
         if self.active_sub_btn:
@@ -831,6 +836,16 @@ class VentanaPrincipal(QMainWindow):
         from PySide6.QtWidgets import QApplication
         if confirmar(self, "Cerrar sesión", "¿Estás seguro de que querés cerrar sesión?"):
             QApplication.quit()
+
+    def abrir_guia_ventas(self):
+        import os
+        from utils.archivos import abrir_archivo
+        ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "documentacion", "Guia_Uso_Ventas_CREDANZA.docx")
+        ruta = os.path.normpath(ruta)
+        if os.path.exists(ruta):
+            abrir_archivo(ruta)
+        else:
+            QMessageBox.warning(self, "Archivo no encontrado", f"No se encontro la guia en:\n{ruta}")
 
     def abrir_cambiar_contrasena(self):
         dlg = ChangePasswordDialog(self, self.usuario)
