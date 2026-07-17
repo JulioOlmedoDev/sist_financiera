@@ -202,12 +202,11 @@ class FormVenta(QWidget):
             getattr(self, attr).setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             self.form.addRow(lbl, getattr(self, attr))
 
-        # --- Monto / Cuotas / Valor (requeridos y > 0) ---
+        # --- Monto / Cuotas (requeridos y > 0) ---
         for text, attr in [("Monto:", 'monto_input'),
-                           ("Cuotas:", 'cuotas_input'),
-                           ("Valor de Cuota:", 'valor_cuota_input')]:
+                           ("Cuotas:", 'cuotas_input')]:
             lbl = QLabel(text); lbl.setStyleSheet(label_style)
-            w = QDoubleSpinBox() if 'monto' in attr or 'valor' in attr else QSpinBox()
+            w = QDoubleSpinBox() if 'monto' in attr else QSpinBox()
             if isinstance(w, QDoubleSpinBox):
                 w.setPrefix("$ "); w.setMaximum(1e9); w.setDecimals(2)
             else:
@@ -216,6 +215,14 @@ class FormVenta(QWidget):
             setattr(self, attr, w)
             w.installEventFilter(self)
             self.form.addRow(lbl, w)
+
+        # Valor de Cuota se crea aca (mismo estilo que Monto), pero se agrega
+        # al formulario mas abajo, despues de las tasas y del boton
+        # "Calcular Cuota Sugerida": es un resultado, no un dato inicial.
+        self.valor_cuota_input = QDoubleSpinBox()
+        self.valor_cuota_input.setPrefix("$ "); self.valor_cuota_input.setMaximum(1e9); self.valor_cuota_input.setDecimals(2)
+        self.valor_cuota_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.valor_cuota_input.installEventFilter(self)
 
         # --- Tasas (requeridas) ---
         lbl = QLabel("T.E.M. (% mensual, incluye IVA):"); lbl.setStyleSheet(label_style)
@@ -245,31 +252,38 @@ class FormVenta(QWidget):
         self.plan_pago_combo.currentTextChanged.connect(self._on_plan_changed)
         self._on_plan_changed(self.plan_pago_combo.currentText())
 
-        # --- Calcular PTF / Interés (requerido antes de guardar) ---
-        self.btn_calcular = QPushButton("Calcular PTF / Interés")
-        self.btn_calcular.setStyleSheet(f"""
-            QPushButton {{ background-color: {i['primario']}; color: white; }}
-            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
-        """)
-        self.btn_calcular.setToolTip("Calcular Precio Total Financiado e interés")
-        self.btn_calcular.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.btn_calcular.clicked.connect(self.calcular_ptf)
-        self.form.addRow("", self.btn_calcular)
-
-        # --- Calcular Cuota Sugerida (sistema frances) ---
+        # --- Calcular Cuota Sugerida (sistema frances) — paso recomendado ---
         self.btn_cuota_sugerida = QPushButton("Calcular Cuota Sugerida (sist. francés)")
         self.btn_cuota_sugerida.setStyleSheet(f"""
             QPushButton {{ background-color: {i['primario']}; color: white; }}
             QPushButton:hover {{ background-color: {i['primario_hover']}; }}
         """)
         self.btn_cuota_sugerida.setToolTip(
-            "Calcula el valor de cuota exacto segun el sistema frances, "
-            "a partir del monto, la TEM y la cantidad de cuotas. "
-            "El resultado queda editable por si necesitas ajustarlo."
+            "Paso recomendado: calcula automaticamente el Valor de Cuota "
+            "a partir del Monto, la TEM y la cantidad de Cuotas (sistema frances). "
+            "El resultado queda cargado en Valor de Cuota y se puede editar despues si hace falta."
         )
         self.btn_cuota_sugerida.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_cuota_sugerida.clicked.connect(self.calcular_cuota_sugerida)
         self.form.addRow("", self.btn_cuota_sugerida)
+
+        lbl = QLabel("Valor de Cuota:"); lbl.setStyleSheet(label_style)
+        self.form.addRow(lbl, self.valor_cuota_input)
+
+        # --- Calcular PTF / Interés (verificacion, requerido antes de guardar) ---
+        self.btn_calcular = QPushButton("Calcular PTF / Interés")
+        self.btn_calcular.setStyleSheet(f"""
+            QPushButton {{ background-color: {i['primario']}; color: white; }}
+            QPushButton:hover {{ background-color: {i['primario_hover']}; }}
+        """)
+        self.btn_calcular.setToolTip(
+            "Muestra el Precio Total Financiado y el interes efectivo resultante "
+            "del Valor de Cuota actual (el sugerido, o uno cargado manualmente). "
+            "Usalo para verificar el resultado antes de guardar la venta."
+        )
+        self.btn_calcular.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.btn_calcular.clicked.connect(self.calcular_ptf)
+        self.form.addRow("", self.btn_calcular)
 
         # --- Salidas ---
         for text, attr in [("PTF:", 'ptf_output'), ("Interés (%):", 'interes_output')]:
@@ -442,6 +456,13 @@ class FormVenta(QWidget):
             if hasattr(self, "scroll_area") and self.scroll_area is not None:
                 QApplication.sendEvent(self.scroll_area.viewport(), event)
             return True
+
+        if event.type() == QEvent.FocusIn and isinstance(obj, (QSpinBox, QDoubleSpinBox)):
+            # Selecciona todo el contenido al entrar al campo, para que al
+            # escribir o borrar no queden restos del numero anterior
+            # (ej. borrar "2000000" a mano podia dejar un "2" suelto).
+            QTimer.singleShot(0, obj.selectAll)
+            return False
 
         if event.type() == QEvent.Enter and obj in getattr(self, "_tooltip_buttons", []):
             text = obj.toolTip() or ""
