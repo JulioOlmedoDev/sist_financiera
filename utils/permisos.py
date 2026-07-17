@@ -3,13 +3,17 @@ from typing import Optional
 from database import get_session
 from models import Permiso, Usuario
 
-# Modo compatibilidad: si aún no migraste permisos, no bloquear la UI.
-try:
-    with get_session() as _s:
-        _PERM_COUNT = _s.query(Permiso).count()
-    _SAFE_MODE = (_PERM_COUNT == 0)
-except Exception:
-    _SAFE_MODE = True  # si falla la DB al importar, no bloquear
+# Modo compatibilidad: si aun no hay permisos cargados en la base, no
+# bloquear la UI. IMPORTANTE: esto se evalua en CADA chequeo (no una sola
+# vez al importar el modulo), para que un estado transitorio al arrancar
+# la app (ej. base recien creada, o un error puntual de conexion) no deje
+# la aplicacion entera en modo "sin restricciones" durante toda la sesion.
+def _modo_compatibilidad() -> bool:
+    try:
+        with get_session() as _s:
+            return _s.query(Permiso).count() == 0
+    except Exception:
+        return True  # si falla la consulta, no bloquear (fail-open solo aca)
 
 # 🔑 Roles que consideramos "admin total" por política de negocio
 ADMIN_ROLES = {"Administrador", "Gerente"}
@@ -39,7 +43,7 @@ def tiene_permiso(usuario: Usuario, nombre_permiso: str) -> bool:
     """
     if es_admin(usuario):
         return True
-    if _SAFE_MODE:
+    if _modo_compatibilidad():
         return True
     try:
         return any((p.nombre == nombre_permiso) for p in getattr(usuario, "permisos", []) or [])
@@ -78,7 +82,7 @@ def tiene_permiso_match(usuario: Usuario, *tokens: str) -> bool:
     """
     if es_admin(usuario):
         return True
-    if _SAFE_MODE:
+    if _modo_compatibilidad():
         return True
     try:
         user_perms = [(p.nombre or "").lower() for p in getattr(usuario, "permisos", []) or []]
