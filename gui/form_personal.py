@@ -14,6 +14,7 @@ from utils.permisos import es_admin, tiene_permiso
 from utils.widgets_custom import parsear_fecha
 from utils.dialogos import confirmar
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -28,24 +29,9 @@ class FormPersonal(QWidget):
         self.editando = personal_id is not None
 
         # --- GUARDA DE PERMISOS ---
-        if not usuario:
-            QMessageBox.critical(self, "Acceso denegado", "Usuario no autenticado.")
-            self.close()
+        tokens = ("0320", "editar_personal") if self.editando else ("0310", "crear_personal")
+        if not require_perm_or_close(self, usuario, *tokens):
             return
-
-        # crear nuevo personal
-        if not self.editando:
-            if not (es_admin(usuario) or tiene_permiso(usuario, "0310 (crear) personal")):
-                QMessageBox.critical(self, "Acceso denegado", "No tenés permiso para crear personal.")
-                self.close()
-                return
-
-        # editar personal existente
-        if self.editando:
-            if not (es_admin(usuario) or tiene_permiso(usuario, "0320 (ver/editar) listado de personal")):
-                QMessageBox.critical(self, "Acceso denegado", "No tenés permiso para editar personal.")
-                self.close()
-                return
         # ----------------------------------------------------
 
         self.setWindowTitle("Gestión de Personal")

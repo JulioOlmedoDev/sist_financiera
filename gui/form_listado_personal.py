@@ -10,6 +10,7 @@ from gui.form_personal import FormPersonal
 from utils.permisos import tiene_permiso, es_admin
 from utils.formato import formato_documento
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 class FormListadoPersonal(QWidget):
     """
@@ -25,16 +26,7 @@ class FormListadoPersonal(QWidget):
         super().__init__()
 
         # --------------------- GUARDA DE ACCESO ---------------------
-        if usuario is None:
-            QMessageBox.critical(self, "Acceso denegado", "Usuario no autenticado.")
-            self.close()
-            return
-
-        # Permisos: ver listado de personal
-        # Consideramos como nombre de permiso legible "0320 (ver/editar) listado de personal"
-        if not (es_admin(usuario) or tiene_permiso(usuario, "0320 (ver/editar) listado de personal")):
-            QMessageBox.critical(self, "Acceso denegado", "No tenés permisos para acceder a esta pantalla.")
-            self.close()
+        if not require_perm_or_close(self, usuario, "0320", "listado de personal"):
             return
         # -------------------------------------------------------------
 
