@@ -800,7 +800,7 @@ class VentanaPrincipal(QMainWindow):
         self.mostrar_formulario(formulario, "Gestión de Permisos")
 
     def abrir_form_consultas(self):
-        self.mostrar_formulario(FormConsultas(), "Consultas Generales")
+        self.mostrar_formulario(FormConsultas(usuario_actual=self.usuario), "Consultas Generales")
 
     def abrir_gestion_clientes(self):
         from PySide6.QtWidgets import QApplication

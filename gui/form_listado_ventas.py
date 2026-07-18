@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload
 from gui.form_venta import FormVenta
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
 from utils.permisos import tiene_permiso_match
+from utils.guards import require_perm_or_close
 from utils.estilos import PALETA
 from utils.archivos import abrir_archivo
 import unicodedata
@@ -23,6 +24,10 @@ class FormVentas(QWidget):
     def __init__(self, usuario_actual=None):
         super().__init__()
         self.usuario_actual = usuario_actual
+
+        if not require_perm_or_close(self, self.usuario_actual, "0050", "listado de ventas"):
+            return
+
         self.setWindowTitle("Gestión de Ventas")
 
         layout = QVBoxLayout(self)

@@ -9,14 +9,20 @@ from database import get_session
 from models import Venta, Cliente, Producto, Categoria, Personal, Cobro
 from utils.formato import formato_documento
 from utils.archivos import abrir_archivo
+from utils.guards import require_perm_or_close
 from sqlalchemy.orm import joinedload
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
 
 class FormConsultas(QWidget):
-    def __init__(self):
+    def __init__(self, usuario_actual=None):
         super().__init__()
+        self.usuario_actual = usuario_actual
+
+        if not require_perm_or_close(self, self.usuario_actual, "0100", "consultas"):
+            return
+
         self.setWindowTitle("Consultas")
 
         layout = QVBoxLayout()

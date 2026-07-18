@@ -13,6 +13,7 @@ from gui.form_garante import FormGarante
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from utils.finanzas import tasa_efectiva_por_plan, calcular_cuota_frances
+from utils.guards import require_perm_or_close
 import os
 from utils.widgets_custom import ComboBoxSinScroll, DateEditSinScroll
 from utils.pdf_utils import generar_docs_word, generar_docs_pdf
@@ -70,6 +71,11 @@ class FormVenta(QWidget):
     def __init__(self, venta_id=None, usuario_actual=None):
         super().__init__()
         self.usuario_actual = usuario_actual
+
+        tokens = ("0052", "editar venta") if venta_id else ("0060", "crear nueva venta")
+        if not require_perm_or_close(self, self.usuario_actual, *tokens):
+            return
+
         self.setWindowTitle("Crear Venta" if not venta_id else "Editar Venta")
         self.setGeometry(300, 200, 600, 800)
         self.venta_id = venta_id

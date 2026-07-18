@@ -5,11 +5,15 @@ from models import Usuario
 from gui.change_password_dialog import ChangePasswordDialog
 from gui.two_factor_setup import TwoFactorSetupDialog
 from utils.dialogos import confirmar
+from utils.guards import require_perm_or_close
 
 class FormMiPerfil(QWidget):
     def __init__(self, usuario_actual):
         super().__init__()
         self.usuario = usuario_actual
+
+        if not require_perm_or_close(self, self.usuario, "0300", "mi perfil"):
+            return
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
