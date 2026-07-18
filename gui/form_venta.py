@@ -517,12 +517,12 @@ class FormVenta(QWidget):
 
     # --- Abrir formularios ---
     def abrir_form_cliente(self):
-        self.nuevo_cliente = FormCliente()
+        self.nuevo_cliente = FormCliente(usuario=self.usuario_actual)
         self.nuevo_cliente.showMaximized()
         self.nuevo_cliente.destroyed.connect(lambda: QTimer.singleShot(100, self.cargar_clientes))
 
     def abrir_form_garante(self):
-        self.nuevo_garante = FormGarante()
+        self.nuevo_garante = FormGarante(usuario=self.usuario_actual)
         self.nuevo_garante.showMaximized()
         self.nuevo_garante.destroyed.connect(lambda: QTimer.singleShot(100, self.cargar_garantes))
 

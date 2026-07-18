@@ -735,13 +735,13 @@ class VentanaPrincipal(QMainWindow):
 
     # ---------- Abrir formularios ----------
     def abrir_form_cliente(self):
-        formulario = FormCliente()
+        formulario = FormCliente(usuario=self.usuario)
         formulario.cliente_guardado.connect(self.abrir_gestion_clientes)
         formulario.cliente_cancelado.connect(self.abrir_gestion_clientes)
         self.mostrar_formulario(formulario, "Gestión de Clientes")
 
     def abrir_form_garante(self):
-        formulario = FormGarante()
+        formulario = FormGarante(usuario=self.usuario)
         formulario.garante_guardado.connect(self.abrir_gestion_garantes)
         formulario.garante_cancelado.connect(self.abrir_gestion_garantes)
         self.mostrar_formulario(formulario, "Gestión de Garantes")
@@ -806,12 +806,12 @@ class VentanaPrincipal(QMainWindow):
         from PySide6.QtWidgets import QApplication
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            self.mostrar_formulario(FormGestionClientes(), "Gestión de Clientes")
+            self.mostrar_formulario(FormGestionClientes(usuario=self.usuario), "Gestión de Clientes")
         finally:
             QApplication.restoreOverrideCursor()
 
     def abrir_gestion_garantes(self):
-        self.mostrar_formulario(FormGestionGarantes(), "Gestión de Garantes")
+        self.mostrar_formulario(FormGestionGarantes(usuario=self.usuario), "Gestión de Garantes")
 
     def abrir_listado_ventas(self):
         from PySide6.QtWidgets import QApplication

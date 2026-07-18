@@ -8,10 +8,14 @@ from models import Cliente
 from gui.form_cliente import FormCliente
 from utils.formato import formato_documento
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 class FormGestionClientes(QWidget):
-    def __init__(self):
+    def __init__(self, usuario=None):
         super().__init__()
+        self.usuario = usuario
+        if not require_perm_or_close(self, usuario, "0030", "listado de clientes"):
+            return
         self.setWindowTitle("Gestión de Clientes")
 
         # Layout principal
@@ -161,7 +165,7 @@ class FormGestionClientes(QWidget):
 
     # ---------- Acciones ----------
     def editar_cliente(self, cliente_id):
-        self.form = FormCliente(cliente_id=cliente_id)
+        self.form = FormCliente(cliente_id=cliente_id, usuario=self.usuario)
         self.form.setWindowModality(Qt.ApplicationModal)
         self.form.setAttribute(Qt.WA_DeleteOnClose)  # importante para limpiar memoria
         self.form.showMaximized()

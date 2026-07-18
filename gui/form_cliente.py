@@ -13,6 +13,7 @@ from database import get_session
 from models import Cliente
 from utils.dialogos import confirmar
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -20,10 +21,15 @@ class FormCliente(QWidget):
     cliente_guardado  = Signal()
     cliente_cancelado = Signal()
 
-    def __init__(self, cliente_id=None):
+    def __init__(self, cliente_id=None, usuario=None):
         super().__init__()
         self.cliente_id = cliente_id
         self.editando = cliente_id is not None
+        self.usuario = usuario
+
+        tokens = ("0030", "editar_clientes") if self.editando else ("0010", "crear_clientes")
+        if not require_perm_or_close(self, self.usuario, *tokens):
+            return
 
         self.setWindowTitle("Gestión de Clientes")
 

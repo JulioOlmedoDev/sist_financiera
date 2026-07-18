@@ -8,10 +8,14 @@ from models import Garante
 from gui.form_garante import FormGarante
 from utils.formato import formato_documento
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 class FormGestionGarantes(QWidget):
-    def __init__(self):
+    def __init__(self, usuario=None):
         super().__init__()
+        self.usuario = usuario
+        if not require_perm_or_close(self, usuario, "0040", "listado de garantes"):
+            return
         self.setWindowTitle("Gestión de Garantes")
 
         # Layout principal
@@ -160,7 +164,7 @@ class FormGestionGarantes(QWidget):
         return lambda checked=False: self.editar_garante(garante_id)
 
     def editar_garante(self, garante_id):
-        self.form = FormGarante(garante_id=garante_id)
+        self.form = FormGarante(garante_id=garante_id, usuario=self.usuario)
         self.form.setWindowModality(Qt.ApplicationModal)
         self.form.setAttribute(Qt.WA_DeleteOnClose)
         self.form.showMaximized()

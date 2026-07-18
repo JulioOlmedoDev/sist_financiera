@@ -13,6 +13,7 @@ from database import get_session
 from models import Garante
 from utils.dialogos import confirmar
 from utils.estilos import PALETA
+from utils.guards import require_perm_or_close
 
 TIPOS_DOC = ["SELECCIONAR", "CF", "CI", "CP", "DNI", "LC", "LE", "MI", "OTROS", "PASAPORTE"]
 
@@ -20,10 +21,15 @@ class FormGarante(QWidget):
     garante_guardado  = Signal()
     garante_cancelado = Signal()
 
-    def __init__(self, garante_id=None):
+    def __init__(self, garante_id=None, usuario=None):
         super().__init__()
         self.garante_id = garante_id
         self.editando = garante_id is not None
+        self.usuario = usuario
+
+        tokens = ("0040", "editar_garantes") if self.editando else ("0020", "crear_garantes")
+        if not require_perm_or_close(self, self.usuario, *tokens):
+            return
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
