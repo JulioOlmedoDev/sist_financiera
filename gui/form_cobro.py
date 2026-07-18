@@ -1,4 +1,5 @@
 # gui/form_cobro.py
+from utils.guards import require_perm_or_close
 
 import unicodedata
 from datetime import date
@@ -79,6 +80,9 @@ class FormCobro(QWidget):
         super().__init__()
         self.venta_id = venta_id
         self.usuario_actual = usuario_actual
+
+        if not require_perm_or_close(self, self.usuario_actual, "0500", "gestion de cobros", "0054", "registrar cobros"):
+            return
         if self.venta_id:
             with get_session() as _s:
                 self.venta = (
@@ -560,7 +564,7 @@ class FormCobro(QWidget):
             for cuota in cuotas:
                 if cuota.pagada:
                     continue
-                saldo = max(cuota.monto_original - cuota.monto_pagado, 0.0)
+                saldo = max(float(cuota.monto_original) - float(cuota.monto_pagado), 0.0)
                 if saldo <= 0:
                     continue
                 pago = min(saldo, restante)
@@ -579,8 +583,8 @@ class FormCobro(QWidget):
                     comprobante=comp
                 )
                 session.add(cobro)
-                cuota.monto_pagado += pago
-                if cuota.monto_pagado >= cuota.monto_original - 1e-6:
+                cuota.monto_pagado = float(cuota.monto_pagado) + pago
+                if float(cuota.monto_pagado) >= float(cuota.monto_original) - 1e-6:
                     cuota.pagada = True
                     cuota.fecha_pago = fecha_cobro
                 restante -= pago
