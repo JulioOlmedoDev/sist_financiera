@@ -139,12 +139,25 @@ class VentanaPrincipal(QMainWindow):
         self._lock_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
         self._lock_shortcut.activated.connect(self.bloquear_pantalla)
 
-    def _circle_avatar(self, path: str, size: int = 24) -> QIcon:
+    def _circle_avatar(self, path: str, size: int = 24, tinte: str | None = None) -> QIcon:
         pm = QPixmap(path)
         if pm.isNull():
             pm = QPixmap(size, size)
             pm.fill(Qt.lightGray)
         pm = pm.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+
+        if tinte:
+            # Recolorea la silueta (icon.png es violeta fijo por defecto)
+            # segun el tema activo, preservando la forma/transparencia.
+            from PySide6.QtGui import QPainter as _QPainter, QColor as _QColor
+            coloreado = QPixmap(pm.size())
+            coloreado.fill(Qt.transparent)
+            pintor_tinte = _QPainter(coloreado)
+            pintor_tinte.drawPixmap(0, 0, pm)
+            pintor_tinte.setCompositionMode(_QPainter.CompositionMode_SourceIn)
+            pintor_tinte.fillRect(coloreado.rect(), _QColor(tinte))
+            pintor_tinte.end()
+            pm = coloreado
 
         from PySide6.QtGui import QPainter, QPainterPath
         circ = QPixmap(size, size); circ.fill(Qt.transparent)
@@ -179,15 +192,15 @@ class VentanaPrincipal(QMainWindow):
             /* Pastilla de perfil (QToolButton) */
             QToolButton {{
                 padding: 8px 14px;
-                border: 1px solid #d9c6ef;
+                border: 1px solid {PALETA['identidad']['pastilla_borde']};
                 border-radius: 20px;      /* pill */
                 background: #ffffff;
                 color: {PALETA['identidad']['primario_oscuro']};
                 font-weight: 700;
                 font-size: 15px;
             }}
-            QToolButton:hover {{ background: #f7f2ff; }}
-            QToolButton:pressed {{ background: #efe6ff; }}
+            QToolButton:hover {{ background: {PALETA['identidad']['menu_hover_fondo']}; }}
+            QToolButton:pressed {{ background: {PALETA['identidad']['menu_pressed_fondo']}; }}
 
             /* Botón Bloquear (morado sólido, como antes) */
             QPushButton#btnBloquear {{
@@ -250,8 +263,8 @@ class VentanaPrincipal(QMainWindow):
                 font-weight: 800;
                 font-size: 12px;
                 letter-spacing: 0.7px;
-                color: #6b21a8;                /* violeta más oscuro */
-                background: #faf5ff;           /* fondo muy suave */
+                color: {PALETA['identidad']['menu_texto_header']};
+                background: {PALETA['identidad']['menu_hover_fondo']};
                 border-left: 3px solid {PALETA['identidad']['primario']};/* acento a la izquierda */
                 border-radius: 6px;
             }}
@@ -260,7 +273,7 @@ class VentanaPrincipal(QMainWindow):
             QMenu::item {{
                 padding: 10px 12px;
                 margin: 4px 6px;
-                border: 1px solid #ede7f6;     /* borde suave */
+                border: 1px solid {PALETA['identidad']['menu_borde_item']};
                 border-radius: 10px;
                 font-weight: 600;
                 font-size: 15px;
@@ -268,12 +281,12 @@ class VentanaPrincipal(QMainWindow):
                 background: #ffffff;           /* base blanco */
             }}
             QMenu::item:selected {{
-                background: #f3e8ff;           /* hover violeta suave */
-                border-color: #d6c3ff;         /* borde un poco más marcado */
+                background: {PALETA['identidad']['menu_hover_fondo']};
+                border-color: {PALETA['identidad']['menu_hover_borde']};
                 color: {PALETA['identidad']['primario_oscuro']};
             }}
             QMenu::item:pressed {{
-                background: #efe6ff;
+                background: {PALETA['identidad']['menu_pressed_fondo']};
             }}
         """
 
@@ -408,6 +421,13 @@ class VentanaPrincipal(QMainWindow):
         btn_ayuda = BotonNavegacion("  Ayuda", "static/icons/help.png")
         btn_ayuda.clicked.connect(self._on_click(self._set_active_menu_btn, btn_ayuda, self.abrir_guia_ventas))
         self.menu_layout.addWidget(btn_ayuda)
+
+        # Apariencia (solo administradores: configuracion global del sistema)
+        from utils.permisos import es_admin
+        if es_admin(self.usuario):
+            btn_apariencia = BotonNavegacion("  Apariencia", "static/icons/palette.png")
+            btn_apariencia.clicked.connect(self._on_click(self._set_active_menu_btn, btn_apariencia, self.abrir_dialog_tema))
+            self.menu_layout.addWidget(btn_apariencia)
 
         self.menu_actual = "principal"
         # Reset subactivo al volver al menú principal
@@ -837,6 +857,11 @@ class VentanaPrincipal(QMainWindow):
         if confirmar(self, "Cerrar sesión", "¿Estás seguro de que querés cerrar sesión?"):
             QApplication.quit()
 
+    def abrir_dialog_tema(self):
+        from gui.dialog_tema import DialogTema
+        dlg = DialogTema(usuario=self.usuario, parent=self)
+        dlg.exec()
+
     def abrir_guia_ventas(self):
         import os
         from utils.archivos import abrir_archivo
@@ -963,7 +988,7 @@ class VentanaPrincipal(QMainWindow):
 
         # Avatar redondo 36x36
         avatar_lbl = QLabel()
-        avatar_icon = self._circle_avatar("static/icon.png", 36)
+        avatar_icon = self._circle_avatar("static/icon.png", 36, tinte=PALETA['identidad']['primario'])
         avatar_lbl.setPixmap(avatar_icon.pixmap(36, 36))
         avatar_lbl.setFixedSize(36, 36)
         hl.addWidget(avatar_lbl)
@@ -1061,7 +1086,7 @@ class VentanaPrincipal(QMainWindow):
         # icono (usa fallback si falta)
         icon_path = "static/icon.png"
         if not QPixmap(icon_path).isNull():
-            self.btn_user.setIcon(self._circle_avatar(icon_path, 22))
+            self.btn_user.setIcon(self._circle_avatar(icon_path, 22, tinte=PALETA['identidad']['primario']))
             self.btn_user.setIconSize(QSize(22, 22))
 
         self.btn_user.setText(self._display_user_text())

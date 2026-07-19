@@ -5,13 +5,12 @@ from gui.dialog_crear_admin import DialogCrearAdmin
 from gui.login_form import LoginForm
 from gui.ventana_principal import VentanaPrincipal
 from database import get_session
-from models import Usuario, Base, engine
-from utils.estilos import PALETA, generar_qss
+from models import Usuario, Base, engine, get_setting
+from utils.estilos import PALETA, generar_qss, aplicar_tema
 import sys
 
 app = QApplication(sys.argv)
 
-app.setStyleSheet(generar_qss(PALETA))
 ventana_principal = None  # Para que no se destruya la ventana principal
 login_window = None       # <- NUEVO: referencia al login para poder cerrarlo al loguear
 
@@ -38,6 +37,15 @@ if __name__ == "__main__":
     except OperationalError as e:
         QMessageBox.critical(None, "Error de Base de Datos", f"No se pudieron crear las tablas:\n{e}")
         sys.exit(1)
+
+    # ❶.5 Aplicar el tema de color guardado (por defecto: violeta)
+    try:
+        with get_session() as session:
+            tema_guardado = get_setting(session, "tema_activo", "violeta")
+    except Exception:
+        tema_guardado = "violeta"
+    aplicar_tema(tema_guardado)
+    app.setStyleSheet(generar_qss(PALETA))
 
     # ❷ Si no hay usuarios en la tabla, crear el super-usuario
     try:
