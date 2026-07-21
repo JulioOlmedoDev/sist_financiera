@@ -8,9 +8,9 @@ from PySide6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QLineEdit, QCompleter,
     QDoubleSpinBox, QInputDialog, QMessageBox, QHBoxLayout, QDialog,
-    QFormLayout, QDialogButtonBox, QSizePolicy, QComboBox
+    QFormLayout, QDialogButtonBox, QSizePolicy, QComboBox, QFrame
 )
-from PySide6.QtCore import QDate, Qt, Signal
+from PySide6.QtCore import QDate, Qt, Signal, QEvent, QTimer
 from database import get_session
 from models import Venta, Cuota, Cobro, Usuario
 from utils.formato import formato_documento
@@ -23,7 +23,7 @@ from utils.estilos import PALETA
 HEIGHT_SEARCH   = 30   # Buscar Venta (alto de controles)
 HEIGHT_TITLE    = 22   # "Venta #..."
 ROW_HEIGHT      = 24   # alto de cada fila de la tabla
-VISIBLE_ROWS    = 12   # filas visibles fijas
+VISIBLE_ROWS    = 18   # filas visibles fijas
 HEIGHT_FIELDS   = 38   # Fecha/Monto/Tipo/Método/Lugar/Comprobante
 HEIGHT_OBS      = 30   # Observaciones
 HEIGHT_BUTTONS  = 40   # Botonera
@@ -33,12 +33,10 @@ ROOT_MARGINS    = (8, 6, 8, 8)  # l, t, r, b
 INPUTS_CSS = """
 QLineEdit, QComboBox, QDoubleSpinBox, QDateEdit {
     font-size: 14px;
-    /* bajar un poco el padding vertical para centrar el texto visualmente */
-    padding: 4px 8px;            /* antes 6px 8px */
-    /* permitir que el alto fijo del layout mande */
-    min-height: 0px;             /* antes 34px */
+    padding: 6px 10px;
+    min-height: 0px;
 }
-QComboBox::drop-down { width: 22px; }
+QComboBox::drop-down { width: 24px; }
 """
 
 
@@ -54,6 +52,7 @@ class DialogCuotaMora(QDialog):
         self.monto_input.setPrefix("$ ")
         self.monto_input.setMaximum(999_999_999.99)
         self.monto_input.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        self.monto_input.installEventFilter(self)
         layout.addRow("Monto:", self.monto_input)
 
         self.fecha_input = DateEditSinScroll(QDate.currentDate())
@@ -64,6 +63,12 @@ class DialogCuotaMora(QDialog):
         botones.accepted.connect(self.accept)
         botones.rejected.connect(self.reject)
         layout.addWidget(botones)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.FocusIn and isinstance(obj, QDoubleSpinBox):
+            QTimer.singleShot(0, obj.selectAll)
+            return False
+        return super().eventFilter(obj, event)
 
     def get_data(self):
         return self.monto_input.value(), self.fecha_input.date().toPython()
@@ -117,6 +122,23 @@ class FormCobro(QWidget):
         a = PALETA["acciones"]
         e = PALETA["especial"]
 
+        self.setStyleSheet(f"""
+            QWidget {{ background-color: #fdfdfd; }}
+            QLineEdit, QComboBox, QDateEdit, QAbstractSpinBox {{
+                background-color: white;
+                border: 1px solid #cccccc;
+                border-radius: 6px;
+            }}
+            QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QAbstractSpinBox:focus {{
+                border: 1px solid {i['primario']};
+            }}
+            QFrame#tarjetaSeccion {{
+                background-color: {i['menu_hover_fondo']};
+                border: 1px solid {i['menu_hover_borde']};
+                border-radius: 8px;
+            }}
+        """)
+
         lbl_buscar = QLabel("Buscar Venta:")
         self.buscador = QLineEdit()
         self.buscador.setPlaceholderText("Apellido, N° doc o #ID (ej.: Pérez · 30123456 · #125)")
@@ -137,9 +159,11 @@ class FormCobro(QWidget):
         fila_busqueda.addWidget(self.buscador, 1)
         fila_busqueda.addWidget(self.btn_cargar_busqueda)
 
-        row_busqueda = QWidget()
+        row_busqueda = QFrame()
+        row_busqueda.setObjectName("tarjetaSeccion")
         row_busqueda.setLayout(fila_busqueda)
-        row_busqueda.setFixedHeight(HEIGHT_SEARCH)
+        fila_busqueda.setContentsMargins(10, 4, 10, 4)
+        row_busqueda.setFixedHeight(HEIGHT_SEARCH + 8)
         root.addWidget(row_busqueda)
 
         # Datos para autocompletar
@@ -177,6 +201,13 @@ class FormCobro(QWidget):
 
         self.lbl_user = QLabel(f"Registrará como: <b>{self.usuario_actual.nombre}</b>")
         self.lbl_user.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_user.setStyleSheet(f"""
+            background-color: {i['primario']};
+            color: white;
+            border-radius: 9px;
+            padding: 2px 10px;
+            font-size: 12px;
+        """)
 
         fila_user = QHBoxLayout()
         fila_user.setContentsMargins(0, 0, 0, 0)
@@ -199,7 +230,9 @@ class FormCobro(QWidget):
         self.lbl_info_venta = QLabel(self._venta_label_text())
         self.lbl_info_venta.setWordWrap(False)
         self.lbl_info_venta.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.lbl_info_venta.setStyleSheet("font-weight:600; font-size:13px; color:#333; margin:0; padding:0;")
+        self.lbl_info_venta.setStyleSheet(
+            f"font-weight:700; font-size:16px; color:{i['primario_oscuro']}; margin:0; padding:0;"
+        )
 
         row_titulo = QWidget()
         lay_titulo = QHBoxLayout(row_titulo)
@@ -223,6 +256,28 @@ class FormCobro(QWidget):
 
         tabla_alto = self._height_for_rows(VISIBLE_ROWS)
         self.tabla_cuotas.setFixedHeight(tabla_alto)
+        self.tabla_cuotas.setStyleSheet(f"""
+            QTableWidget {{
+                gridline-color: #e0e0e0;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                background-color: white;
+                alternate-background-color: #fafafa;
+            }}
+            QHeaderView::section:horizontal {{
+                background-color: {i['primario']};
+                color: white;
+                padding: 4px;
+                border: none;
+                font-weight: bold;
+            }}
+            QHeaderView::section:vertical {{
+                background-color: #f0f0f0;
+                color: #666666;
+                border: none;
+                padding: 2px;
+            }}
+        """)
         root.addWidget(self.tabla_cuotas)
 
         # ===== Bloque: Fecha / Monto / Tipo / Método / Lugar / Comprobante =====
@@ -239,6 +294,7 @@ class FormCobro(QWidget):
         self.monto_input.setPrefix("$ ")
         self.monto_input.setMaximum(999_999_999.99)
         self.monto_input.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        self.monto_input.installEventFilter(self)
 
         lbl_tipo = QLabel("Tipo:")
         self.tipo_combo = ComboBoxSinScroll()
@@ -259,8 +315,7 @@ class FormCobro(QWidget):
         # Alinear verticalmente los labels y unificar aspecto
         for lab in (lbl_fecha, lbl_monto, lbl_tipo, lbl_metodo, lbl_lugar, lbl_comp):
             lab.setAlignment(Qt.AlignVCenter)
-            lab.setStyleSheet("font-size: 14px; margin: 0; padding: 0;")
-
+            lab.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {i['primario_oscuro']}; margin: 0; padding: 0;")
 
         # estilo/altura
         for w in (self.fecha_input, self.monto_input, self.tipo_combo,
@@ -279,29 +334,29 @@ class FormCobro(QWidget):
         if hasattr(self.lugar_combo, "setMaximumWidth"):        self.lugar_combo.setMaximumWidth(180)
         if hasattr(self.comprobante_input, "setMaximumWidth"):  self.comprobante_input.setMaximumWidth(200)
 
-        # Alineación vertical a nivel de layout para cada control (evita “caída” visual)
-        for w in (lbl_fecha, self.fecha_input,
-                lbl_monto, self.monto_input,
-                lbl_tipo, self.tipo_combo,
-                lbl_metodo, self.metodo_combo,
-                lbl_lugar, self.lugar_combo,
-                lbl_comp, self.comprobante_input):
-            fila_campos.setAlignment(w, Qt.AlignVCenter)
+        # Agrupar cada etiqueta con su campo (separacion chica dentro del grupo),
+        # y dejar mas aire ENTRE los 6 grupos para que se distingan claramente.
+        def _grupo_campo(label, campo):
+            grupo = QWidget()
+            lay_grupo = QHBoxLayout(grupo)
+            lay_grupo.setContentsMargins(0, 0, 0, 0)
+            lay_grupo.setSpacing(6)
+            lay_grupo.addWidget(label)
+            lay_grupo.addWidget(campo)
+            lay_grupo.setAlignment(Qt.AlignVCenter)
+            grupo.setFixedHeight(HEIGHT_FIELDS)
+            return grupo
 
-        fila_campos.addWidget(lbl_fecha); fila_campos.addWidget(self.fecha_input)
-        fila_campos.addWidget(lbl_monto); fila_campos.addWidget(self.monto_input)
-        fila_campos.addWidget(lbl_tipo);  fila_campos.addWidget(self.tipo_combo)
-        fila_campos.addWidget(lbl_metodo); fila_campos.addWidget(self.metodo_combo)
-        fila_campos.addWidget(lbl_lugar);  fila_campos.addWidget(self.lugar_combo)
-        fila_campos.addWidget(lbl_comp);   fila_campos.addWidget(self.comprobante_input)
+        fila_campos.setSpacing(34)
+        fila_campos.addWidget(_grupo_campo(lbl_fecha, self.fecha_input))
+        fila_campos.addWidget(_grupo_campo(lbl_monto, self.monto_input))
+        fila_campos.addWidget(_grupo_campo(lbl_tipo, self.tipo_combo))
+        fila_campos.addWidget(_grupo_campo(lbl_metodo, self.metodo_combo))
+        fila_campos.addWidget(_grupo_campo(lbl_lugar, self.lugar_combo))
+        fila_campos.addWidget(_grupo_campo(lbl_comp, self.comprobante_input))
         fila_campos.addStretch(1)
 
         fila_campos.setAlignment(Qt.AlignVCenter)
-        row_campos = QWidget()
-        row_campos.setLayout(fila_campos)
-        row_campos.setFixedHeight(HEIGHT_FIELDS)
-        root.addWidget(row_campos)
-
         # ===== Bloque: Observaciones =====
         fila_obs = QHBoxLayout()
         fila_obs.setContentsMargins(0, 0, 0, 0)
@@ -312,10 +367,14 @@ class FormCobro(QWidget):
         self.observaciones_input.setFixedHeight(HEIGHT_OBS)
         fila_obs.addWidget(self.observaciones_input, 1)
 
-        row_obs = QWidget()
-        row_obs.setLayout(fila_obs)
-        row_obs.setFixedHeight(HEIGHT_OBS)
-        root.addWidget(row_obs)
+        tarjeta_carga = QFrame()
+        tarjeta_carga.setObjectName("tarjetaSeccion")
+        lay_tarjeta_carga = QVBoxLayout(tarjeta_carga)
+        lay_tarjeta_carga.setContentsMargins(10, 8, 10, 8)
+        lay_tarjeta_carga.setSpacing(8)
+        lay_tarjeta_carga.addLayout(fila_campos)
+        lay_tarjeta_carga.addLayout(fila_obs)
+        root.addWidget(tarjeta_carga)
 
         # ===== Botones =====
         botones = QHBoxLayout()
@@ -329,6 +388,7 @@ class FormCobro(QWidget):
         """)
         self.btn_guardar.clicked.connect(self.registrar_cobro)
         botones.addWidget(self.btn_guardar)
+        botones.addStretch(1)
 
         self.btn_finalizar = QPushButton("Finalizar Venta")
         self.btn_finalizar.setEnabled(False)
@@ -357,6 +417,12 @@ class FormCobro(QWidget):
 
         # Carga inicial
         self.cargar_cuotas()
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.FocusIn and isinstance(obj, QDoubleSpinBox):
+            QTimer.singleShot(0, obj.selectAll)
+            return False
+        return super().eventFilter(obj, event)
 
     # ---------------- Utilidades ----------------
     def _normalize(self, texto: str) -> str:
