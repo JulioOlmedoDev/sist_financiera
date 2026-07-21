@@ -40,13 +40,13 @@ class FormListadoProductos(QWidget):
         
         # Título principal
         titulo = QLabel("Gestión de Categorías y Productos")
-        titulo.setStyleSheet("""
-            QLabel {
+        titulo.setStyleSheet(f"""
+            QLabel {{
                 font-size: 24px;
                 font-weight: bold;
-                color: #7b1fa2;
+                color: {PALETA['identidad']['primario_hover']};
                 margin-bottom: 10px;
-            }
+            }}
         """)
         self.layout_principal.addWidget(titulo)
         
@@ -74,44 +74,44 @@ class FormListadoProductos(QWidget):
         self.layout_principal.addLayout(botones_superiores)
         
         # Aplicar estilos generales
-        self.setStyleSheet("""
-            QWidget {
+        self.setStyleSheet(f"""
+            QWidget {{
                 font-size: 14px;
                 background-color: #fdfdfd;
                 font-family: Arial, sans-serif;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 font-weight: bold;
                 color: #333;
-            }
-            QFrame[objectName="categoria_frame"] {
-                background-color: #f3e5f5;
-                border: 2px solid #9c27b0;
+            }}
+            QFrame[objectName="categoria_frame"] {{
+                background-color: {PALETA['identidad']['menu_hover_fondo']};
+                border: 2px solid {PALETA['identidad']['primario']};
                 border-radius: 12px;
                 padding: 20px;
                 margin-bottom: 20px;
-            }
-            QFrame[objectName="productos_frame"] {
+            }}
+            QFrame[objectName="productos_frame"] {{
                 background-color: #ffffff;
-                border: 1px solid #e1bee7;
+                border: 1px solid {PALETA['identidad']['menu_hover_borde']};
                 border-radius: 8px;
                 padding: 15px;
                 margin: 10px 0px;
-            }
-            QFrame[objectName="producto_item"] {
+            }}
+            QFrame[objectName="producto_item"] {{
                 background-color: #fafafa;
                 border: 1px solid #e0e0e0;
                 border-radius: 6px;
                 padding: 8px;
                 margin: 4px 0px;
-            }
-            QFrame[objectName="vacio_frame"] {
+            }}
+            QFrame[objectName="vacio_frame"] {{
                 background-color: white;
                 border: 1px solid #ddd;
                 border-radius: 8px;
                 padding: 16px;
                 margin-bottom: 16px;
-            }
+            }}
         """)
         
         # Layout principal de la ventana
@@ -188,29 +188,29 @@ class FormListadoProductos(QWidget):
             
             # Número de categoría y nombre
             numero_cat = QLabel(f"#{i+1}")
-            numero_cat.setStyleSheet("""
-                QLabel {
+            numero_cat.setStyleSheet(f"""
+                QLabel {{
                     font-size: 14px;
                     font-weight: bold;
-                    color: #7b1fa2;
+                    color: {PALETA['identidad']['primario_hover']};
                     background-color: white;
-                    border: 2px solid #7b1fa2;
+                    border: 2px solid {PALETA['identidad']['primario_hover']};
                     border-radius: 15px;
                     padding: 5px 10px;
                     min-width: 30px;
                     max-width: 50px;
-                }
+                }}
             """)
             numero_cat.setAlignment(Qt.AlignCenter)
             
             label_cat = QLabel(f"📁 {cat.nombre}")
-            label_cat.setStyleSheet("""
-                QLabel {
+            label_cat.setStyleSheet(f"""
+                QLabel {{
                     font-size: 20px;
                     font-weight: bold;
-                    color: #4a148c;
+                    color: {PALETA['identidad']['primario_oscuro']};
                     margin-left: 10px;
-                }
+                }}
             """)
             
             header_layout.addWidget(numero_cat)
@@ -221,14 +221,14 @@ class FormListadoProductos(QWidget):
             # Línea separadora
             linea = QFrame()
             linea.setFrameShape(QFrame.HLine)
-            linea.setStyleSheet("""
-                QFrame {
-                    color: #9c27b0;
-                    background-color: #9c27b0;
+            linea.setStyleSheet(f"""
+                QFrame {{
+                    color: {PALETA['identidad']['primario']};
+                    background-color: {PALETA['identidad']['primario']};
                     border: none;
                     height: 2px;
                     margin: 5px 0px;
-                }
+                }}
             """)
             frame_layout.addWidget(linea)
             
@@ -238,13 +238,13 @@ class FormListadoProductos(QWidget):
             if productos:
                 # Título de sección de productos
                 titulo_productos = QLabel(f"Productos ({len(productos)})")
-                titulo_productos.setStyleSheet("""
-                    QLabel {
+                titulo_productos.setStyleSheet(f"""
+                    QLabel {{
                         font-size: 16px;
                         font-weight: bold;
-                        color: #6a1b9a;
+                        color: {PALETA['identidad']['primario_pressed']};
                         margin: 5px 0px;
-                    }
+                    }}
                 """)
                 frame_layout.addWidget(titulo_productos)
                 
@@ -370,14 +370,14 @@ class FormListadoProductos(QWidget):
             # Separador antes de botones
             separador = QFrame()
             separador.setFrameShape(QFrame.HLine)
-            separador.setStyleSheet("""
-                QFrame {
-                    color: #ce93d8;
-                    background-color: #ce93d8;
+            separador.setStyleSheet(f"""
+                QFrame {{
+                    color: {PALETA['identidad']['menu_hover_borde']};
+                    background-color: {PALETA['identidad']['menu_hover_borde']};
                     border: none;
                     height: 1px;
                     margin: 10px 0px;
-                }
+                }}
             """)
             frame_layout.addWidget(separador)
             

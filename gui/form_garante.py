@@ -68,7 +68,7 @@ class FormGarante(QWidget):
         for i, (label_text, key, requerido, *tipo) in enumerate(campos):
             row, col = divmod(i, 2)
             label = QLabel(f"{label_text}{' *' if requerido else ''}")
-            label.setStyleSheet("color: #7b1fa2;" if requerido else "color: #333;")
+            label.setStyleSheet(f"color: {PALETA['identidad']['primario_hover']};" if requerido else "color: #333;")
             self.labels[key] = label
 
             if tipo and tipo[0] == "combo":
@@ -134,41 +134,41 @@ class FormGarante(QWidget):
         self.btn_guardar.clicked.connect(self.guardar_garante)
         self.btn_cancelar.clicked.connect(self.cancelar_formulario)
 
-        self.setStyleSheet("""
-            QWidget {
+        self.setStyleSheet(f"""
+            QWidget {{
                 font-size: 14px;
                 background-color: #fdfdfd;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 font-weight: bold;
                 color: #333;
-            }
-            QLineEdit, QComboBox, QTextEdit {
+            }}
+            QLineEdit, QComboBox, QTextEdit {{
                 padding: 6px;
                 border: 1px solid #ccc;
                 border-radius: 4px;
                 background-color: #fff;
-            }
-            QLineEdit.error, QComboBox.error {
+            }}
+            QLineEdit.error, QComboBox.error {{
                 border: 2px solid red;
-            }
-            QPushButton {
-                background-color: #9c27b0;
+            }}
+            QPushButton {{
+                background-color: {PALETA['identidad']['primario']};
                 color: white;
                 padding: 10px 20px;
                 border-radius: 4px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
-            }
-            QComboBox QAbstractItemView {
+            }}
+            QPushButton:hover {{
+                background-color: {PALETA['identidad']['primario_hover']};
+            }}
+            QComboBox QAbstractItemView {{
                 background-color: white;
                 border: 1px solid #bdbdbd;
                 selection-background-color: #ffe0b2;
                 selection-color: #424242;
                 padding: 4px;
-            }
+            }}
         """)
 
         main_layout = QVBoxLayout(self)

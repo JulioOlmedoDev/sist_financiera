@@ -47,18 +47,18 @@ class FormGestionGarantes(QWidget):
         QTimer.singleShot(0, self._load_after_paint)
 
         # Estilo (igual a Clientes)
-        self.setStyleSheet("""
-            QLabel#titulo {
+        self.setStyleSheet(f"""
+            QLabel#titulo {{
                 font-size: 22px;
                 font-weight: bold;
-                color: #6a1b9a;
-            }
-            QTableWidget {
+                color: {PALETA['identidad']['primario_pressed']};
+            }}
+            QTableWidget {{
                 background-color: #ffffff;
                 border: 1px solid #dddddd;
                 border-radius: 6px;
                 font-size: 14px;
-            }
+            }}
         """)
 
     # ---------- Carga diferida ----------

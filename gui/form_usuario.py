@@ -44,25 +44,25 @@ class FormUsuario(QWidget):
 
         # Campos
         label_personal = QLabel("Seleccionar Personal *")
-        label_personal.setStyleSheet("color: #7b1fa2;")
+        label_personal.setStyleSheet(f"color: {PALETA['identidad']['primario_hover']};")
         self.personal_combo = QComboBox()
         self.personal_combo.setMinimumHeight(30)
         self.personal_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         label_usuario = QLabel("Nombre de usuario *")
-        label_usuario.setStyleSheet("color: #7b1fa2;")
+        label_usuario.setStyleSheet(f"color: {PALETA['identidad']['primario_hover']};")
         self.nombre_input = QLineEdit()
         self.nombre_input.setMinimumHeight(30)
 
         label_password = QLabel("Contraseña")
-        label_password.setStyleSheet("color: #7b1fa2;")
+        label_password.setStyleSheet(f"color: {PALETA['identidad']['primario_hover']};")
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
         self.password_input.setMinimumHeight(30)
 
         # ---- NUEVO: Rol
         label_rol = QLabel("Rol del usuario")
-        label_rol.setStyleSheet("color: #7b1fa2;")
+        label_rol.setStyleSheet(f"color: {PALETA['identidad']['primario_hover']};")
         self.rol_combo = QComboBox()
         self.rol_combo.setMinimumHeight(30)
         self.rol_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)

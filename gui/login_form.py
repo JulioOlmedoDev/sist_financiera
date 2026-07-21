@@ -110,13 +110,13 @@ class TokenDialog(QDialog):
                 padding: 10px;
                 font-size: 18px;
                 letter-spacing: 3px;
-                border: 1px solid #d7c6ef;
+                border: 1px solid {PALETA['identidad']['pastilla_borde']};
                 border-radius: 8px;
-                background: #faf7ff;
+                background: {PALETA['identidad']['menu_hover_fondo']};
             }}
             QLineEdit:focus {{
                 border: 1px solid {PALETA['identidad']['primario']};
-                background: #f7f2ff;
+                background: {PALETA['identidad']['menu_hover_fondo']};
             }}
             QPushButton {{
                 min-width: 110px;
@@ -132,8 +132,8 @@ class TokenDialog(QDialog):
                 background-color: {PALETA['identidad']['primario']}; color: {PALETA['neutros']['texto_blanco']};
             }}
             QPushButton#brandGhost {{
-                background-color: #efe6ff; color: {PALETA['identidad']['primario_oscuro']};
-                border: 1px solid #d9c6ef;
+                background-color: {PALETA['identidad']['menu_pressed_fondo']}; color: {PALETA['identidad']['primario_oscuro']};
+                border: 1px solid {PALETA['identidad']['pastilla_borde']};
             }}
         """)
 

@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PIL import Image, ImageQt
 import qrcode, pyotp
 from database import get_session
+from utils.estilos import PALETA
 
 ISSUER = "CREDANZA"  # lo que verá el usuario en su app de autenticación
 
@@ -66,7 +67,7 @@ class TwoFactorSetupDialog(QDialog):
         # Si ya estaba habilitado, avisamos (podría usarse para reconfigurar)
         if getattr(self.usuario, "totp_enabled", False):
             aviso = QLabel("Ya tenés 2FA activo. Si reconfigurás, reemplazará tu clave anterior.")
-            aviso.setStyleSheet("color:#7b1fa2;")
+            aviso.setStyleSheet(f"color:{PALETA['identidad']['primario_hover']};")
             layout.insertWidget(0, aviso)
 
     def _render_qr(self):

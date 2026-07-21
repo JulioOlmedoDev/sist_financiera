@@ -97,7 +97,7 @@ class FormVenta(QWidget):
         main_layout.addWidget(scroll_area)
 
         title = QLabel("Registro de Venta" if not venta_id else "Edición de Venta")
-        title.setStyleSheet("color:#4a148c; font-size:18px; font-weight:bold;")
+        title.setStyleSheet(f"color:{PALETA['identidad']['primario_oscuro']}; font-size:18px; font-weight:bold;")
         scroll_layout.addWidget(title)
 
         # --- Form ---
@@ -108,26 +108,26 @@ class FormVenta(QWidget):
         self.form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         scroll_layout.addLayout(self.form)
 
-        label_style = "font-weight:bold; color:#7b1fa2;"
+        label_style = f"font-weight:bold; color:{PALETA['identidad']['primario_hover']};"
         self.label_style = label_style
 
         # Estilos
-        self.setStyleSheet("""
-            QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+        self.setStyleSheet(f"""
+            QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
                 border:1px solid #bdbdbd; border-radius:4px; padding:5px;
                 background:white; min-height:25px;
-            }
+            }}
             QLineEdit:focus, QTextEdit:focus, QComboBox:focus,
-            QSpinBox:focus, QDoubleSpinBox:focus {
-                border:2px solid #9c27b0;
-            }
-            QToolTip {
-                background-color: #4a148c;
+            QSpinBox:focus, QDoubleSpinBox:focus {{
+                border:2px solid {PALETA['identidad']['primario']};
+            }}
+            QToolTip {{
+                background-color: {PALETA['identidad']['primario_oscuro']};
                 color: white;
                 border: 1px solid #bdbdbd;
                 padding: 6px;
                 border-radius: 4px;
-            }
+            }}
         """)
 
         i = PALETA["identidad"]

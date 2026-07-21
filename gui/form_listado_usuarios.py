@@ -68,7 +68,7 @@ class FormListadoUsuarios(QWidget):
         layout.setSpacing(20)
 
         titulo = QLabel("Listado de Usuarios")
-        titulo.setStyleSheet("color: #6a1b9a;")
+        titulo.setStyleSheet(f"color: {PALETA['identidad']['primario_pressed']};")
         layout.addWidget(titulo)
 
         self.tabla = QTableWidget()

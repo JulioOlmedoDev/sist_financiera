@@ -40,7 +40,7 @@ class FormListadoPersonal(QWidget):
 
         # Título (opcional)
         titulo = QLabel("Listado de Personal")
-        titulo.setStyleSheet("font-size: 20px; font-weight: bold; color: #6a1b9a;")
+        titulo.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {PALETA['identidad']['primario_pressed']};")
         layout.addWidget(titulo)
 
         # Buscador

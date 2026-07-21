@@ -182,7 +182,7 @@ class VentanaPrincipal(QMainWindow):
             QPushButton:hover {{ background-color: {PALETA['identidad']['primario_hover']}; }}
             QPushButton:pressed {{ background-color: {PALETA['identidad']['primario_pressed']}; }}
 
-            QFrame#sidebar {{ background-color: {PALETA['identidad']['primario_oscuro']}; border-right: 1px solid #3e1178; }}
+            QFrame#sidebar {{ background-color: {PALETA['identidad']['primario_oscuro']}; border-right: 1px solid {PALETA['identidad']['primario_pressed']}; }}
             QFrame#header {{ background-color: white; border-bottom: 1px solid #e0e0e0; }}
             QFrame#content {{ background-color: white; border-radius: 8px; border: 1px solid #e0e0e0; }}
         """

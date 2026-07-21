@@ -46,8 +46,8 @@ class FormCategoria(QDialog):
                 font-family: Arial, sans-serif;
             }}
             QFrame[objectName="main_card"] {{
-                background-color: #f3e5f5;
-                border: 2px solid #9c27b0;
+                background-color: {PALETA['identidad']['menu_hover_fondo']};
+                border: 2px solid {PALETA['identidad']['primario']};
                 border-radius: 12px;
                 padding: 0px;
             }}
@@ -64,7 +64,7 @@ class FormCategoria(QDialog):
                 min-height: 20px;
             }}
             QLineEdit:focus {{
-                border: 2px solid #9c27b0;
+                border: 2px solid {PALETA['identidad']['primario']};
             }}
             QPushButton {{
                 background-color: {PALETA['identidad']['primario']};
@@ -100,7 +100,7 @@ class FormCategoria(QDialog):
         titulo = QLabel()
         titulo.setTextFormat(Qt.RichText)
         titulo.setText(
-            f'<div style="line-height:135%; padding-bottom:2px; color:#4a148c; '
+            f'<div style="line-height:135%; padding-bottom:2px; color:{PALETA["identidad"]["primario_oscuro"]}; '
             f'font-weight:700; font-size:20px;">'
             f'📁 {"Nueva Categoría" if not self.editando else "Editar Categoría"}'
             f'</div>'
@@ -110,26 +110,26 @@ class FormCategoria(QDialog):
         # Línea separadora
         linea = QFrame()
         linea.setFrameShape(QFrame.HLine)
-        linea.setStyleSheet("""
-            QFrame {
-                color: #9c27b0;
-                background-color: #9c27b0;
+        linea.setStyleSheet(f"""
+            QFrame {{
+                color: {PALETA['identidad']['primario']};
+                background-color: {PALETA['identidad']['primario']};
                 border: none;
                 height: 2px;
                 margin: 5px 0px;
-            }
+            }}
         """)
         card_layout.addWidget(linea)
         
         # Campo nombre
         nombre_label = QLabel("Nombre de la Categoría *")
-        nombre_label.setStyleSheet("""
-            QLabel {
+        nombre_label.setStyleSheet(f"""
+            QLabel {{
                 font-size: 15px;
                 font-weight: bold;
-                color: #7b1fa2;
+                color: {PALETA['identidad']['primario_hover']};
                 margin-bottom: 5px;
-            }
+            }}
         """)
         card_layout.addWidget(nombre_label)
         
@@ -156,14 +156,14 @@ class FormCategoria(QDialog):
         # Separador antes de botones
         separador = QFrame()
         separador.setFrameShape(QFrame.HLine)
-        separador.setStyleSheet("""
-            QFrame {
-                color: #ce93d8;
-                background-color: #ce93d8;
+        separador.setStyleSheet(f"""
+            QFrame {{
+                color: {PALETA['identidad']['menu_hover_borde']};
+                background-color: {PALETA['identidad']['menu_hover_borde']};
                 border: none;
                 height: 1px;
                 margin: 10px 0px;
-            }
+            }}
         """)
         card_layout.addWidget(separador)
         
