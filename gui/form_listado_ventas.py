@@ -61,7 +61,7 @@ class FormVentas(QWidget):
             QLabel#titulo {{
                 font-size: 22px;
                 font-weight: bold;
-                color: #6a1b9a;
+                color: {PALETA['identidad']['primario_pressed']};
             }}
             QTableWidget {{
                 background-color: #ffffff;
@@ -281,7 +281,7 @@ class FormVentas(QWidget):
                              "Solo podés marcar anulada. ¿Continuar?"):
                 return
 
-        self.form = FormVenta(venta_id=venta_id)
+        self.form = FormVenta(venta_id=venta_id, usuario_actual=self.usuario_actual)
         self.form.setWindowModality(Qt.ApplicationModal)
         self.form.setAttribute(Qt.WA_DeleteOnClose)
         self.form.showMaximized()
