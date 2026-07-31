@@ -11,17 +11,18 @@ de models.py, database.py y utils/):
 from fastapi import FastAPI
 
 from api import config
-from api.routers import auth
+from api.routers import auth, clientes
 
 config.validar_config()
 
 app = FastAPI(
     title="CREDANZA API",
     description="API de gestión financiera CREDANZA — CODER 4",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.include_router(auth.router)
+app.include_router(clientes.router)
 
 
 @app.get("/health", tags=["infra"])
