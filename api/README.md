@@ -1,109 +1,84 @@
-# CREDANZA API — Fase 2, Sesión 1 (CODER 4)
+# CREDANZA API — Fase 2 (CODER 4)
 
-Esqueleto FastAPI + autenticación completa. La desktop app **no se toca**: la API corre en paralelo.
+Backend FastAPI que se interpone entre la app de escritorio y MySQL.
+La desktop app no se toca: la API corre en paralelo.
 
-## Estructura (colocar dentro de `sist_financiera/`)
-
-```
-api/
-├── __init__.py
-├── main.py                  # App FastAPI + /health
-├── config.py                # Lectura de .env, validación fail-fast
-├── tokens.py                # JWT (PyJWT): scopes session / preauth:2fa
-├── schemas.py               # Contratos Pydantic
-├── deps.py                  # get_current_user (Bearer)
-├── routers/
-│   └── auth.py              # POST /auth/login, POST /auth/verify-2fa, GET /auth/me
-└── services/
-    └── auth_service.py      # Lógica de login (réplica exacta de login_form.py)
-```
-
-Reusa `models.py`, `database.py` y `utils/security.py` de la raíz — cero duplicación.
-
-## Instalación
-
-1. Agregar a `requirements.txt`:
-   ```
-   fastapi==0.116.1
-   uvicorn[standard]==0.35.0
-   pyjwt==2.10.1
-   ```
-   (o las versiones que resuelva pip; PyJWT en lugar de python-jose por mantenimiento activo y sin CVEs abiertos)
-
-2. `pip install fastapi "uvicorn[standard]" pyjwt`
-
-3. Agregar al `.env`:
-   ```
-   API_SECRET_KEY=<generar con: python -c "import secrets; print(secrets.token_hex(32))">
-   ```
-
-## Ejecución (desde la raíz del repo, importante para los imports)
+## Ejecución (desde la raíz del repo)
 
 ```bash
 uvicorn api.main:app --reload
 ```
 
-Documentación interactiva automática: http://127.0.0.1:8000/docs
+Documentación interactiva: http://127.0.0.1:8000/docs
 
-## Prueba rápida con curl
+## Requisitos en .env
 
-```bash
-# Login simple
-curl -s -X POST http://127.0.0.1:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"usuario": "TU_USUARIO", "password": "TU_CLAVE"}'
-
-# Si devolvió status "2fa_required", segundo paso:
-curl -s -X POST http://127.0.0.1:8000/auth/verify-2fa \
-  -H "Content-Type: application/json" \
-  -d '{"temp_token": "<temp_token>", "code": "123456"}'
-
-# Endpoint protegido
-curl -s http://127.0.0.1:8000/auth/me \
-  -H "Authorization: Bearer <access_token>"
+```
+API_SECRET_KEY=<generar con: python -c "import secrets; print(secrets.token_hex(32))">
 ```
 
-## Contrato de /auth/login
+Opcionales: `API_ACCESS_TOKEN_MINUTES` (480), `API_PREAUTH_TOKEN_MINUTES` (5),
+`API_SETUP_2FA_TOKEN_MINUTES` (10).
 
-| Resultado | HTTP | Cuerpo |
+## Endpoints
+
+### Autenticación
+
+| Endpoint | Auth | Descripción |
 |---|---|---|
-| Credenciales malas / usuario inactivo | 401 | detail genérico (no revela cuál falló) |
-| Cuenta bloqueada | 423 | detail con minutos restantes |
-| Cambio de contraseña obligatorio/vencida | 200 | `status: password_change_required` (sin token) |
-| 2FA exigido pero no configurado | 200 | `status: 2fa_setup_required` (sin token) |
-| Falta código TOTP | 200 | `status: 2fa_required` + `temp_token` (5 min) |
-| Login completo | 200 | `status: ok` + `access_token` (8 hs) |
+| POST /auth/login | — | Login por nombre de usuario. Réplica exacta de la desktop: bloqueo a los 5 intentos (15 min), migración legacy SHA-256→Argon2, expiración 60 días, política 2FA global/por usuario. |
+| POST /auth/verify-2fa | temp_token 2fa | Segundo paso: código TOTP de 6 dígitos (valid_window=1). |
+| POST /auth/change-password | sesión o temp_token pwchange | Reglas de ChangePasswordDialog: mínimo 10 caracteres, no puede contener el nombre de usuario. Resetea must_change_password, intentos y bloqueo. |
+| POST /auth/2fa/setup/init | sesión o temp_token setup | Genera secret + otpauth_uri (issuer CREDANZA). Nada se persiste: el secret viaja firmado en setup_token. |
+| POST /auth/2fa/setup/confirm | sesión o temp_token setup | Verifica el código contra el secret pendiente y recién ahí activa el 2FA. |
+| POST /auth/2fa/disable | sesión | Desactiva 2FA de autoservicio. 403 si fue impuesto por admin (totp_set_by_admin). |
+| GET /auth/me | sesión | Datos del usuario autenticado. |
 
-## Verificación realizada (entorno Claude, stubs fieles al spec + SQLite)
+### Estados del login (campo `status` con HTTP 200)
 
-24 checks end-to-end en verde: login ok + /me, mensaje genérico idéntico para
-password mala / usuario inexistente / inactivo, bloqueo exacto al 5to intento
-(incluso con clave correcta), migración legacy SHA-256→Argon2 con re-login,
-contraseña vencida sin token, flujo 2FA de dos pasos, temp_token rechazado en
-/me, código TOTP malo rechazado, require_2fa por usuario y global (SystemSetting).
+- `ok` → viene access_token (8 hs).
+- `password_change_required` → viene temp_token (5 min) para /auth/change-password; luego re-login.
+- `2fa_setup_required` → viene temp_token (5 min) para /auth/2fa/setup/*; luego re-login.
+- `2fa_required` → viene temp_token (5 min) para /auth/verify-2fa.
 
-`test_e2e.py` se incluye como referencia; para correrlo contra tu repo real hay
-que adaptar el seed (usa `SessionLocal` del stub de database).
+Errores: 401 credenciales inválidas (mensaje genérico), 423 cuenta bloqueada.
 
-## Supuestos a confirmar con tu código real (revisar antes del primer commit)
+### Clientes (patrón CRUD de referencia)
 
-1. `get_setting(session, "require_2fa_global", "0")` — confirmar la CLAVE exacta
-   que usa la desktop app y el formato del valor (asumí "1"/"true" = activado).
-2. Nombres de relaciones `Usuario.permisos/rol/personal` — coinciden con tu spec.
-3. Fallos de código 2FA NO incrementan `failed_attempts` (decisión mía; confirmar
-   qué hace hoy la desktop app y alinear si difiere).
-4. `last_password_change = None` se trata como "no vencida" (no se puede calcular).
+Todos exigen sesión autenticada.
 
-## Commits chicos sugeridos
+| Endpoint | Descripción |
+|---|---|
+| GET /clientes?buscar=&pagina=1&tamanio=50 | Listado paginado; busca en apellidos, nombres y nro_documento. |
+| GET /clientes/{id} | Detalle (404 si no existe). |
+| POST /clientes | Alta (409 si tipo+nro de documento duplicado). |
+| PUT /clientes/{id} | Actualización parcial: solo aplica los campos enviados. |
+| DELETE /clientes/{id} | Baja (409 si tiene ventas asociadas, 404 si no existe). |
 
-1. `Agregar dependencias FastAPI, uvicorn y PyJWT`
-2. `Crear esqueleto de API con configuración y health check`
-3. `Implementar emisión y validación de tokens JWT con scopes`
-4. `Implementar servicio de login replicando lógica de escritorio`
-5. `Agregar endpoints /auth/login, /auth/verify-2fa y /auth/me`
+PENDIENTE: mapear el sistema de permisos granulares (códigos de guards.py)
+a los endpoints como dependencia de FastAPI.
 
-## Próxima sesión (no incluido hoy)
+## Diseño de tokens (JWT, HS256)
 
-- Endpoint de cambio de contraseña (destraba `password_change_required`)
-- Endpoint de configuración de 2FA con QR (destraba `2fa_setup_required`)
-- Primer recurso de negocio (ej. clientes) para validar el patrón CRUD
+Scopes: `session` (acceso), `preauth:2fa`, `preauth:pwchange`, `preauth:2fa_setup`
+(intermedios de login, 5 min, solo sirven para su endpoint), `2fa_setup_pending`
+(transporta el secret TOTP firmado entre init y confirm, 10 min).
+
+## Verificación
+
+52 checks end-to-end en verde contra el models.py real y un database.py
+idéntico al real (SQLite): regresión completa de sesión 1 + cambio de
+contraseña (validaciones, temp_token, sesión), setup 2FA (no-persistencia
+hasta código válido, issuer, reconfiguración segura), disable (autoservicio
+ok / impuesto por admin 403) y CRUD de clientes (duplicados, búsqueda,
+paginación, integridad con ventas).
+
+## Notas
+
+- La confirmación por doble entrada de contraseña es responsabilidad del
+  cliente (UI); la API valida las reglas de fondo.
+- Fidelidad desktop: last_password_change se escribe con utcnow() (como
+  ChangePasswordDialog) aunque el login compara con now() local — desfase
+  de horas, irrelevante para el umbral de 60 días. Pendiente de unificar.
+- Los endpoints de gestión por admin (imponer 2FA, recuperar acceso,
+  ABM de usuarios) quedan para una sesión posterior.
