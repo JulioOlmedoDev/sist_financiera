@@ -188,3 +188,116 @@ def obtener_usuario_actual(usuario_id: int) -> Optional[UsuarioActual]:
             rol_id=usuario.rol_id,
             activo=usuario.activo,
         )
+
+
+# ---------------------------------------------------------------------------
+# Fase 2 / Sesión 2: cambio de contraseña y configuración de 2FA
+# ---------------------------------------------------------------------------
+
+ISSUER_2FA = "CREDANZA"  # mismo issuer que gui/two_factor_setup.py
+
+# Estados de cambio de contraseña
+PW_OK = "ok"
+PW_CORTA = "corta"
+PW_CONTIENE_NOMBRE = "contiene_nombre"
+PW_USUARIO_INVALIDO = "usuario_invalido"
+
+# Estados de desactivación de 2FA
+DIS_OK = "ok"
+DIS_BLOQUEADO_ADMIN = "bloqueado_admin"
+DIS_NO_ACTIVO = "no_activo"
+DIS_USUARIO_INVALIDO = "usuario_invalido"
+
+
+def cambiar_password(usuario_id: int, nueva_password: str) -> str:
+    """Replica exactamente las reglas y efectos de ChangePasswordDialog._save:
+      - mínimo 10 caracteres (tras strip),
+      - no puede contener el nombre de usuario (case-insensitive),
+      - al guardar: hash Argon2, last_password_change=utcnow(),
+        must_change_password=False, failed_attempts=0, lock_until=None.
+
+    Nota de fidelidad: se usa datetime.utcnow() porque es lo que escribe la
+    desktop app (aunque el login compara con now() local; desfase de horas,
+    irrelevante para el umbral de 60 días — pendiente de unificar).
+    """
+    pwd = (nueva_password or "").strip()
+
+    if len(pwd) < 10:
+        return PW_CORTA
+
+    with get_session() as session:
+        usuario = session.get(Usuario, usuario_id)
+        if usuario is None or not usuario.activo:
+            return PW_USUARIO_INVALIDO
+
+        if usuario.nombre and usuario.nombre.lower() in pwd.lower():
+            return PW_CONTIENE_NOMBRE
+
+        usuario.password = hash_password(pwd)
+        usuario.last_password_change = datetime.utcnow()
+        usuario.must_change_password = False
+        usuario.failed_attempts = 0
+        usuario.lock_until = None
+        session.commit()
+        return PW_OK
+
+
+def iniciar_setup_2fa(usuario_id: int):
+    """Genera un secret TOTP nuevo y la URI de aprovisionamiento, igual que
+    TwoFactorSetupDialog: pyotp.random_base32(), name="CREDANZA:{email o nombre}",
+    issuer_name="CREDANZA". NO persiste nada — el secret viaja en el setup_token
+    firmado y solo se guarda en confirmar_setup_2fa tras un código válido.
+
+    Devuelve (secret, otpauth_uri, ya_activo) o None si el usuario no es válido.
+    """
+    with get_session() as session:
+        usuario = session.get(Usuario, usuario_id)
+        if usuario is None or not usuario.activo:
+            return None
+
+        secret = pyotp.random_base32()
+        totp = pyotp.TOTP(secret, digits=6, interval=30)
+        cuenta = usuario.email or usuario.nombre
+        uri = totp.provisioning_uri(
+            name="{}:{}".format(ISSUER_2FA, cuenta), issuer_name=ISSUER_2FA
+        )
+        ya_activo = bool(usuario.totp_enabled)
+        return secret, uri, ya_activo
+
+
+def confirmar_setup_2fa(usuario_id: int, secret: str, code: str) -> bool:
+    """Verifica el código contra el secret pendiente (valid_window=1, igual que
+    el diálogo) y recién entonces persiste totp_secret + totp_enabled=True.
+    Autoservicio: totp_set_by_admin no se modifica."""
+    totp = pyotp.TOTP(secret, digits=6, interval=30)
+    if not totp.verify(code, valid_window=1):
+        return False
+
+    with get_session() as session:
+        usuario = session.get(Usuario, usuario_id)
+        if usuario is None or not usuario.activo:
+            return False
+        usuario.totp_secret = secret
+        usuario.totp_enabled = True
+        session.commit()
+        return True
+
+
+def desactivar_2fa(usuario_id: int) -> str:
+    """Replica la política de FormMiPerfil._toggle_2fa:
+      - si totp_set_by_admin=True → el usuario NO puede desactivarlo
+        (fue impuesto por política de la empresa),
+      - si lo activó él mismo → totp_enabled=False, totp_secret=None.
+    """
+    with get_session() as session:
+        usuario = session.get(Usuario, usuario_id)
+        if usuario is None or not usuario.activo:
+            return DIS_USUARIO_INVALIDO
+        if not usuario.totp_enabled:
+            return DIS_NO_ACTIVO
+        if usuario.totp_set_by_admin:
+            return DIS_BLOQUEADO_ADMIN
+        usuario.totp_enabled = False
+        usuario.totp_secret = None
+        session.commit()
+        return DIS_OK
