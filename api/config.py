@@ -1,15 +1,13 @@
 """
 Configuración central de la API CREDANZA.
 
-Todas las variables sensibles se leen del .env de la raíz del proyecto
-(el mismo que ya usa la app de escritorio).
-
 Variables nuevas requeridas en .env:
-    API_SECRET_KEY=<cadena aleatoria larga>   # generar con: python -c "import secrets; print(secrets.token_hex(32))"
+    API_SECRET_KEY=<cadena aleatoria larga>
 
 Variables opcionales:
-    API_ACCESS_TOKEN_MINUTES=480   # duración del token de sesión (default 8 hs)
-    API_PREAUTH_TOKEN_MINUTES=5    # duración del token intermedio de 2FA
+    API_ACCESS_TOKEN_MINUTES=480   # token de sesión (default 8 hs)
+    API_PREAUTH_TOKEN_MINUTES=5    # tokens intermedios (2FA, cambio de clave)
+    API_SETUP_2FA_TOKEN_MINUTES=10 # token de configuración de 2FA (lleva el secret)
 """
 
 import os
@@ -21,6 +19,7 @@ load_dotenv()
 API_SECRET_KEY = os.environ.get("API_SECRET_KEY", "")
 ACCESS_TOKEN_MINUTES = int(os.environ.get("API_ACCESS_TOKEN_MINUTES", "480"))
 PREAUTH_TOKEN_MINUTES = int(os.environ.get("API_PREAUTH_TOKEN_MINUTES", "5"))
+SETUP_2FA_TOKEN_MINUTES = int(os.environ.get("API_SETUP_2FA_TOKEN_MINUTES", "10"))
 JWT_ALGORITHM = "HS256"
 
 
